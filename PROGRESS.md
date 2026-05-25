@@ -25,10 +25,19 @@ _Updated: 2026-05-25_
 
 - [x] **TASK-004** 部署 fork 为 zotero MCP(hybrid 注册) — `uv tool install --editable D:\Claude\zotero-mcp`(入口 `C:\Users\yun\.local\bin\{zotero-mcp,zotero-cli}.exe`,v0.4.1);`~/.claude.json` 的 `zotero` 注册改指向新 exe + 加 hybrid env(`ZOTERO_LOCAL/LIBRARY_TYPE/LIBRARY_ID/API_KEY` + `ZOTERO_WEBDAV_URL/USERNAME/PASSWORD`,坚果云 dav.jianguoyun.com);配置已备份。验证:exe `version` + `zotero-cli search` 读真实库 OK + WebDAV PROPFIND 207(凭据有效)。笔记走 data sync、PDF 附件走 WebDAV。
   (~/.claude.json 在仓库外,无 commit)
-  - **待办**:① 重启 Claude Code 新 server 才生效;② 旧包 `zotero-mcp-server 0.3.0` 因 exe 运行中没卸成(WinError 32),重启后再 `py -3.11 -m pip uninstall zotero-mcp-server`;③ PATH 上新旧 exe 并存(`.local\bin` 与 `AppData\Roaming\...`),卸旧后消歧义。
+  - **待办(已全部完成,见下「端到端实跑结论」)**:① 重启生效 ✅;② 卸旧包 ✅;③ PATH 消歧 ✅。
+
+## 端到端实跑结论(2026-05-25,重启后新 server)
+- 新 server 生效:语义工具消失、`zotero_create_note` 在且 `content_format` 默认 markdown。
+- 旧包 `zotero-mcp-server 0.3.0` 已卸(先杀 4 个残留旧进程 PID 36132/21456/14480/12756 释放 exe 锁);旧 exe 消失,`zotero-mcp` 解析到 `.local\bin`,PATH 歧义消除。
+- 实跑链(测试条目 AlphaFold DOI 10.1038/s41586-021-03819-2,用完已 trash):
+  - ✅ `add_by_doi` 入库,PDF 报 attached(source: Unpaywall)
+  - ⚠ `get_item_fulltext`:元数据+摘要 OK,但 **PDF 正文取不到** — 本地 storage 404 + WebDAV「Attachment 3TUC98C9 not found」
+  - ✅ `create_note` markdown 子笔记:parentItem 正确,h1/h2/h3/strong/em/ul/ol/code/a/table 全部渲染正确(raw_html 读回确认)
+- **新发现(待 spike)**:add_by_doi 经 web API 上传 PDF → 落点疑为 **Zotero 云存储**;Yun 桌面文件 sync 走 **WebDAV** → 两者不相交,MCP 传的 PDF 可能既不进 WebDAV、桌面也同步不下来。get_item_fulltext 只查 local+WebDAV 故取不到。需确认是**同步时序**还是**上传路径结构错配**;前者等桌面 sync 后重试即可,后者需改 add_by_doi 上传走 WebDAV 或改用 Zotero 云存储配额。
 
 ## 待办 / 决策悬置
-- **整条工作流端到端实跑**:检索→add_by_doi 入库(带 WebDAV PDF)→get_item_fulltext→create_note markdown 子笔记,串起来跑一遍真实库(重启后做)。
+- **PDF 上传落点 spike**(见上):确认 add_by_doi 的 PDF 是否最终对 WebDAV 桌面可达;决定是否改上传路径。
 - **独立 find_pdf 工具**:按 Yun 意延后(OA 级联已内嵌 add_by_doi);需要可补(给已入库缺 PDF 的条目补抓)。
 - **Local API only(D4)**:已改 hybrid;web/hybrid/WebDAV 代码保留(现在是必需,不再考虑删)。
 - **CLAUDE.md 未纳入版本控制**:被 upstream `.gitignore` 忽略,内容已更新但仅在本地。是否 force-add 待 Yun 定。
