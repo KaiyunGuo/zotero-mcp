@@ -27,6 +27,10 @@ _Updated: 2026-05-25_
   (~/.claude.json 在仓库外,无 commit)
   - **待办(已全部完成,见下「端到端实跑结论」)**:① 重启生效 ✅;② 卸旧包 ✅;③ PATH 消歧 ✅。
 
+- [x] **TASK-005** OA PDF 上传走 WebDAV — `_download_and_attach_pdf`(_helpers.py)原用 pyzotero `attachment_both` 上传,落点 Zotero 云存储,WebDAV-storage 桌面取不到(根因见下「端到端实跑结论·新发现」)。修:`attachment_both` 后若 `is_webdav_configured()` 则 `upload_attachment_to_webdav(key, file)`(在 tempdir with 块内,文件未删),照搬 `add_from_file`(write.py:2088)working pattern。`_extract_attachment_key` 移入 `_helpers`(write.py 改引 `_helpers._extract_attachment_key`)。一处修复覆盖 add_by_doi/url/bibtex/csl_json 四入口。**TDD**:先写失败测试(test_pdf_cascade.py 加 `test_webdav_push_when_configured`/`_not_configured`)跑红→实现→30 项绿,全套无新增回归(test_add_from_file.py 2 失败为既有 os.path.isabs+Win/Py3.13 harness bug,stash 验证原 src 同样失败)。my src ruff 零错。
+  `22c0f7a` fix: OA PDF 入库同步推送 WebDAV (TASK-005)
+  - **live e2e 待重启**:当前 MCP server 进程内存里是旧 `_helpers`(editable 装不热重载运行中进程);重启 Claude Code 后用真实 OA 论文复跑 add_by_doi→确认 `<KEY>.zip` 落 WebDAV→get_item_fulltext 直接读 WebDAV 取回正文→清理。
+
 ## 端到端实跑结论(2026-05-25,重启后新 server)
 - 新 server 生效:语义工具消失、`zotero_create_note` 在且 `content_format` 默认 markdown。
 - 旧包 `zotero-mcp-server 0.3.0` 已卸(先杀 4 个残留旧进程 PID 36132/21456/14480/12756 释放 exe 锁);旧 exe 消失,`zotero-mcp` 解析到 `.local\bin`,PATH 歧义消除。
