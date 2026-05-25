@@ -26,6 +26,16 @@ have a DOI or URL, the MCP takes over.
 4. **Duplicates:** if an add reports a duplicate, surface it to the user; do not
    force a second copy.
 
+## 全文抽取(get_item_fulltext)
+
+- 总能拿到**元数据 + 摘要**(来自 Zotero 索引)。**PDF 正文**则需文件实际存在于
+  本地 Zotero storage 或 WebDAV 才取得到。
+- **刚 `add_by_doi` 后立即取正文可能失败**(本地 storage 404 / WebDAV
+  "Attachment not found"):新附件经 web API 上传,桌面端还没把文件同步到
+  本地/WebDAV。先等桌面 Zotero 完成一次同步再重试。若持续取不到,见 PROGRESS
+  「PDF 上传落点 spike」——疑为 web API 上传落点与 WebDAV 文件 sync 不相交,待确认。
+- 只在**确实要读整篇**时调它(返回整篇,常上万 token);检索/浏览不要用。
+
 ## 笔记写回
 
 - `zotero_create_note` / `zotero_update_note` default to `content_format="markdown"`
