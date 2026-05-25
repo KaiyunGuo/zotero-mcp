@@ -5,6 +5,7 @@ import os
 import tempfile
 import uuid
 
+import markdown as _markdown
 import requests
 
 from zotero_mcp._context import Context
@@ -19,6 +20,32 @@ _WEB_API_ENV_VARS = (
     "- ZOTERO_LIBRARY_ID: Your library ID\n"
     "- ZOTERO_LIBRARY_TYPE: 'user' or 'group'"
 )
+
+# Markdown extensions for note bodies: "extra" covers tables, fenced code,
+# definition lists, etc.; "sane_lists" makes list parsing predictable.
+_MD_EXTENSIONS = ["extra", "sane_lists"]
+
+
+def _markdown_to_html(text: str) -> str:
+    """Convert a Markdown note body to Zotero-compatible HTML.
+
+    Zotero stores note bodies as HTML. Raw HTML embedded in the source passes
+    through unchanged, so callers may freely mix Markdown and HTML. Empty or
+    whitespace-only input is returned as-is.
+
+    Parameters
+    ----------
+    text : str
+        Markdown (or HTML) source for the note body.
+
+    Returns
+    -------
+    str
+        HTML rendering of ``text``.
+    """
+    if not text or not text.strip():
+        return text or ""
+    return _markdown.markdown(text, extensions=_MD_EXTENSIONS)
 
 
 def _download_attachment_for_processing(
@@ -911,14 +938,16 @@ def search_notes(
         "Create a new child note attached to a Zotero item. "
         "item_key: parent item key (the note becomes a child of this item). "
         "note_title: title displayed in Zotero's note pane. "
-        "note_text: note body; simple HTML is preserved (p, strong, em, "
-        "ul/ol/li, a, blockquote, code). "
+        "note_text: note body. content_format='markdown' (default) accepts "
+        "Markdown (headings, lists, bold/italic, links, code, tables) and "
+        "raw HTML passes through; content_format='html' treats note_text as "
+        "HTML/plain text. "
         "tags: optional list of tag strings to attach to the note. "
         "Requires a writable library (web API key or hybrid mode) — fails "
         "in local-only mode. To edit an existing note instead, use "
         "zotero_update_note. Example: zotero_create_note("
         "item_key='ABC12345', note_title='Reading notes', "
-        "note_text='<p>Key claim: ...</p>', tags=['to-cite'])."
+        "note_text='## Key claim\\n- point one\\n- point two', tags=['to-cite'])."
     )
 )
 @with_zotero_api_lock
@@ -927,6 +956,7 @@ def create_note(
     note_title: str,
     note_text: str,
     tags: list[str] | str | None = None,
+    content_format: str = "markdown",
     *,
     ctx: Context
 ) -> str:
@@ -936,8 +966,10 @@ def create_note(
     Args:
         item_key: Zotero item key/ID to attach the note to
         note_title: Title for the note
-        note_text: Content of the note (can include simple HTML formatting)
+        note_text: Content of the note
         tags: List of tags to apply to the note
+        content_format: "markdown" (default) renders note_text from Markdown to
+            HTML; "html" uses note_text as HTML/plain text
         ctx: MCP context
 
     Returns:
@@ -956,9 +988,12 @@ def create_note(
         except Exception:
             return f"Error: No item found with key: {item_key}"
 
-        # Format the note content with proper HTML
-        # If the note_text already has HTML, use it directly
-        if "<p>" in note_text or "<div>" in note_text:
+        # Convert the note body to HTML. "markdown" (default) renders Markdown
+        # (raw HTML in the source passes through); "html" keeps the legacy
+        # behavior of using existing HTML as-is or wrapping plain text.
+        if content_format == "markdown":
+            html_content = _markdown_to_html(note_text)
+        elif "<p>" in note_text or "<div>" in note_text:
             html_content = note_text
         else:
             # Convert plain text to HTML paragraphs - avoiding f-strings with replacements
@@ -1064,22 +1099,22 @@ def create_note(
         "Update the HTML body of an existing Zotero note. "
         "item_key: the NOTE's own key (NOT the parent item's key) — use "
         "zotero_get_notes or zotero_search_notes to find it. "
-        "note_text: new HTML content. "
+        "note_text: new note body. content_format='markdown' (default) renders "
+        "Markdown to HTML (raw HTML passes through); content_format='html' "
+        "treats note_text as HTML. "
         "append=False (default) REPLACES the entire note body; append=True "
-        "concatenates note_text after the existing body. "
-        "To preserve existing formatting when editing, first fetch the note "
-        "with zotero_get_notes(raw_html=True), modify the HTML, then pass "
-        "the full HTML back. "
+        "concatenates the rendered content after the existing body. "
         "Requires a writable library (web API key or hybrid mode) — fails "
         "in local-only mode. "
         "Example: zotero_update_note(item_key='NOTE1234', "
-        "note_text='<p>Revised summary</p>', append=False)."
+        "note_text='## Revised summary\\n- updated point', append=False)."
     )
 )
 def update_note(
     item_key: str,
     note_text: str,
     append: bool = False,
+    content_format: str = "markdown",
     *,
     ctx: Context
 ) -> str:
@@ -1088,9 +1123,11 @@ def update_note(
 
     Args:
         item_key: Zotero item key/ID of the note to update
-        note_text: New HTML content of the note
+        note_text: New content of the note
         append: If True, concatenate note_text to existing note content;
             if False (default), replace existing content.
+        content_format: "markdown" (default) renders note_text from Markdown to
+            HTML; "html" uses note_text as HTML
         ctx: MCP context
 
     Returns:
@@ -1111,6 +1148,9 @@ def update_note(
         data = item.get("data", {})
         if data.get("itemType") != "note":
             return f"Error: Item {item_key} is not a note (itemType={data.get('itemType')})"
+
+        if content_format == "markdown":
+            note_text = _markdown_to_html(note_text)
 
         if append:
             data["note"] = (data.get("note", "") or "") + note_text
