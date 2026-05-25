@@ -24,6 +24,10 @@ _Updated: 2026-05-25_
 - **Find Available PDF 无 local API 端点**(findAvailable 全 404):D12 收尾——放弃换 Zotero 自带,**保留外置 OA 级联**。
 - **决策 D4 修正**:`local only` → **hybrid(local 读 + web API 写)**。Yun 库已登录账号、data sync 走 Zotero、文件 sync 走 WebDAV,hybrid 可行。子笔记/改元数据均走 web API。
 
+- [x] **TASK-004** 部署 fork 为 zotero MCP(hybrid 注册) — `uv tool install --editable D:\Claude\zotero-mcp`(入口 `C:\Users\yun\.local\bin\{zotero-mcp,zotero-cli}.exe`,v0.4.1);`~/.claude.json` 的 `zotero` 注册改指向新 exe + 加 hybrid env(`ZOTERO_LOCAL/LIBRARY_TYPE/LIBRARY_ID/API_KEY`);配置已备份 `~/.claude.json.bak-20260525-140725`。验证:exe `version` + `zotero-cli search` 读真实库 OK。
+  (~/.claude.json 在仓库外,无 commit)
+  - **待办**:① 重启 Claude Code 新 server 才生效;② 旧包 `zotero-mcp-server 0.3.0` 因 exe 运行中没卸成(WinError 32),重启后再 `py -3.11 -m pip uninstall zotero-mcp-server`;③ PATH 上新旧 exe 并存(`.local\bin` 与 `AppData\Roaming\...`),卸旧后消歧义。
+
 ## 待办 / 决策悬置
 - **hybrid 配置**:联调子笔记前需 Yun 提供 `ZOTERO_API_KEY` + `ZOTERO_LIBRARY_ID`(+`LIBRARY_TYPE`);文件走已配的 WebDAV(`ZOTERO_WEBDAV_*`)。
 - **Local API only(D4)**:已改 hybrid;web/hybrid/WebDAV 代码保留(现在是必需,不再考虑删)。
