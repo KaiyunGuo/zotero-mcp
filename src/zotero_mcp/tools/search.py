@@ -267,34 +267,34 @@ def search_items(
                     if items:
                         fallback_strategy = "full-text search"
 
-                # Strategy 4: Semantic search (if database exists)
-                if not _check_cascade_timeout() and not items:
-                    try:
-                        from zotero_mcp.semantic_search import create_semantic_search
-                        config_path = Path.home() / ".config" / "zotero-mcp" / "config.json"
-                        if config_path.exists():
-                            ctx.info(f"Retry with semantic search: '{query}'")
-                            t0 = _time.monotonic()
-                            sem_search = create_semantic_search(str(config_path))
-                            _search_logger.debug(f"[CASCADE] semantic init: {_time.monotonic() - t0:.2f}s")
-                            t0 = _time.monotonic()
-                            sem_results = sem_search.search(query=query, limit=limit or 10)
-                            _search_logger.debug(f"[CASCADE] semantic query: {_time.monotonic() - t0:.2f}s")
-                            if sem_results and sem_results.get("results"):
-                                seen_keys: set[str] = set()
-                                for sr in sem_results["results"]:
-                                    zot_item = sr.get("zotero_item", {})
-                                    key = sr.get("item_key", zot_item.get("key", ""))
-                                    if key and key not in seen_keys:
-                                        seen_keys.add(key)
-                                        if "key" not in zot_item:
-                                            zot_item["key"] = key
-                                        items.append(zot_item)
-                                if items:
-                                    fallback_strategy = "semantic search"
-                    except Exception as e:
-                        _search_logger.debug(f"[CASCADE] semantic failed: {e}")
-                        ctx.info(f"Semantic search fallback failed: {e}")
+                # Strategy 4: Semantic search — DISABLED by Yun (semantic search removed)
+                # if not _check_cascade_timeout() and not items:
+                #     try:
+                #         from zotero_mcp.semantic_search import create_semantic_search
+                #         config_path = Path.home() / ".config" / "zotero-mcp" / "config.json"
+                #         if config_path.exists():
+                #             ctx.info(f"Retry with semantic search: '{query}'")
+                #             t0 = _time.monotonic()
+                #             sem_search = create_semantic_search(str(config_path))
+                #             _search_logger.debug(f"[CASCADE] semantic init: {_time.monotonic() - t0:.2f}s")
+                #             t0 = _time.monotonic()
+                #             sem_results = sem_search.search(query=query, limit=limit or 10)
+                #             _search_logger.debug(f"[CASCADE] semantic query: {_time.monotonic() - t0:.2f}s")
+                #             if sem_results and sem_results.get("results"):
+                #                 seen_keys: set[str] = set()
+                #                 for sr in sem_results["results"]:
+                #                     zot_item = sr.get("zotero_item", {})
+                #                     key = sr.get("item_key", zot_item.get("key", ""))
+                #                     if key and key not in seen_keys:
+                #                         seen_keys.add(key)
+                #                         if "key" not in zot_item:
+                #                             zot_item["key"] = key
+                #                         items.append(zot_item)
+                #                 if items:
+                #                     fallback_strategy = "semantic search"
+                #     except Exception as e:
+                #         _search_logger.debug(f"[CASCADE] semantic failed: {e}")
+                #         ctx.info(f"Semantic search fallback failed: {e}")
 
             _search_logger.debug(f"[CASCADE] total: {_time.monotonic() - _cascade_start:.2f}s, fallback={fallback_strategy}")
 
@@ -768,29 +768,30 @@ def advanced_search(
         return f"Error in advanced search: {str(e)}"
 
 
-@mcp.tool(
-    name="zotero_semantic_search",
-    description=(
-        "Prioritized topic-search tool. Find papers by semantic similarity "
-        "to a query using AI embeddings — the BEST tool for finding papers "
-        "on a topic (e.g. 'papers about mindfulness-based therapy'), far "
-        "more efficient than scanning collection items or reading "
-        "abstracts. Works across the entire active library. "
-        "query: the topic or concept; natural-language phrases work well. "
-        "limit: max results (default 10). "
-        "filters: optional metadata filters as a dict (e.g. "
-        "{'itemType': 'journalArticle', 'year': '2023'}); also accepts a "
-        "JSON string. "
-        "Requires the semantic search database to be POPULATED — run "
-        "zotero_update_search_database first if you just installed the "
-        "server or added new items; check readiness with "
-        "zotero_get_search_database_status. "
-        "Available only when the [semantic] optional dependency is "
-        "installed (pip install zotero-mcp-server[semantic]). "
-        "Example: zotero_semantic_search(query='mindfulness-based "
-        "cognitive therapy for depression', limit=5)."
-    )
-)
+# Semantic search MCP tool — DISABLED by Yun (registration commented out; function kept dormant for reference)
+# @mcp.tool(
+#     name="zotero_semantic_search",
+#     description=(
+#         "Prioritized topic-search tool. Find papers by semantic similarity "
+#         "to a query using AI embeddings — the BEST tool for finding papers "
+#         "on a topic (e.g. 'papers about mindfulness-based therapy'), far "
+#         "more efficient than scanning collection items or reading "
+#         "abstracts. Works across the entire active library. "
+#         "query: the topic or concept; natural-language phrases work well. "
+#         "limit: max results (default 10). "
+#         "filters: optional metadata filters as a dict (e.g. "
+#         "{'itemType': 'journalArticle', 'year': '2023'}); also accepts a "
+#         "JSON string. "
+#         "Requires the semantic search database to be POPULATED — run "
+#         "zotero_update_search_database first if you just installed the "
+#         "server or added new items; check readiness with "
+#         "zotero_get_search_database_status. "
+#         "Available only when the [semantic] optional dependency is "
+#         "installed (pip install zotero-mcp-server[semantic]). "
+#         "Example: zotero_semantic_search(query='mindfulness-based "
+#         "cognitive therapy for depression', limit=5)."
+#     )
+# )
 @with_zotero_api_lock
 def semantic_search(
     query: str,
@@ -904,28 +905,29 @@ def semantic_search(
         return f"Error in semantic search: {str(e)}"
 
 
-@mcp.tool(
-    name="zotero_update_search_database",
-    description=(
-        "Build or refresh the semantic search embedding database from "
-        "Zotero items. Run this: (a) after first install, (b) after adding "
-        "items via zotero_add_by_doi / add_by_url / add_from_file, or "
-        "(c) when the user has added items directly in Zotero desktop "
-        "since the last update. "
-        "By default the update is INCREMENTAL — only new or changed items "
-        "are re-embedded, so repeated calls are cheap. "
-        "force_rebuild=True re-embeds ALL items from scratch (slow; use "
-        "when changing the embedding model or recovering from corruption). "
-        "limit: optional cap on items processed (useful for smoke-testing). "
-        "Progress is reported via the MCP context; on large libraries an "
-        "incremental update is seconds, a full rebuild can take minutes. "
-        "Requires the [semantic] optional dependency and a configured "
-        "embedding provider (see config.json). Check status with "
-        "zotero_get_search_database_status. "
-        "Example: zotero_update_search_database() after adding a batch of "
-        "papers."
-    )
-)
+# Semantic search DB update MCP tool — DISABLED by Yun (registration commented out; function kept dormant for reference)
+# @mcp.tool(
+#     name="zotero_update_search_database",
+#     description=(
+#         "Build or refresh the semantic search embedding database from "
+#         "Zotero items. Run this: (a) after first install, (b) after adding "
+#         "items via zotero_add_by_doi / add_by_url / add_from_file, or "
+#         "(c) when the user has added items directly in Zotero desktop "
+#         "since the last update. "
+#         "By default the update is INCREMENTAL — only new or changed items "
+#         "are re-embedded, so repeated calls are cheap. "
+#         "force_rebuild=True re-embeds ALL items from scratch (slow; use "
+#         "when changing the embedding model or recovering from corruption). "
+#         "limit: optional cap on items processed (useful for smoke-testing). "
+#         "Progress is reported via the MCP context; on large libraries an "
+#         "incremental update is seconds, a full rebuild can take minutes. "
+#         "Requires the [semantic] optional dependency and a configured "
+#         "embedding provider (see config.json). Check status with "
+#         "zotero_get_search_database_status. "
+#         "Example: zotero_update_search_database() after adding a batch of "
+#         "papers."
+#     )
+# )
 @with_zotero_api_lock
 def update_search_database(
     force_rebuild: bool = False,
@@ -996,22 +998,23 @@ def update_search_database(
         return f"Error updating search database: {str(e)}"
 
 
-@mcp.tool(
-    name="zotero_get_search_database_status",
-    description=(
-        "Report the semantic search database's readiness and stats: item "
-        "count, last update time, embedding provider / model, and whether "
-        "the [semantic] optional dependency is installed. "
-        "Use this to decide whether zotero_semantic_search will return "
-        "useful results, or whether the user should run "
-        "zotero_update_search_database first. "
-        "Takes no parameters; no side effects. "
-        "Returns a human-readable status block. If the [semantic] extras "
-        "are not installed, returns an install hint instead of stats. "
-        "Example: zotero_get_search_database_status() → count, last sync, "
-        "provider summary."
-    )
-)
+# Semantic search DB status MCP tool — DISABLED by Yun (registration commented out; function kept dormant for reference)
+# @mcp.tool(
+#     name="zotero_get_search_database_status",
+#     description=(
+#         "Report the semantic search database's readiness and stats: item "
+#         "count, last update time, embedding provider / model, and whether "
+#         "the [semantic] optional dependency is installed. "
+#         "Use this to decide whether zotero_semantic_search will return "
+#         "useful results, or whether the user should run "
+#         "zotero_update_search_database first. "
+#         "Takes no parameters; no side effects. "
+#         "Returns a human-readable status block. If the [semantic] extras "
+#         "are not installed, returns an install hint instead of stats. "
+#         "Example: zotero_get_search_database_status() → count, last sync, "
+#         "provider summary."
+#     )
+# )
 @with_zotero_api_lock
 def get_search_database_status(*, ctx: Context) -> str:
     """

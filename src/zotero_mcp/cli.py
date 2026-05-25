@@ -209,31 +209,32 @@ def main():
     setup_parser.add_argument("--semantic-config-only", action="store_true",
                              help="Only configure semantic search, skip Zotero setup")
 
-    # Update database command
-    update_db_parser = subparsers.add_parser("update-db", help="Update semantic search database")
-    update_db_parser.add_argument("--force-rebuild", action="store_true",
-                                 help="Force complete rebuild of the database")
-    update_db_parser.add_argument("--limit", type=int,
-                                 help="Limit number of items to process (for testing)")
-    update_db_parser.add_argument("--fulltext", action="store_true",
-                                 help="Extract fulltext content from local Zotero database (slower but more comprehensive)")
-    update_db_parser.add_argument("--config-path",
-                                 help="Path to semantic search configuration file")
-    update_db_parser.add_argument("--db-path",
-                                 help="Path to Zotero database file (zotero.sqlite), overrides config")
-
-    # Database status command
-    db_status_parser = subparsers.add_parser("db-status", help="Show semantic search database status")
-    db_status_parser.add_argument("--config-path",
-                                 help="Path to semantic search configuration file")
-
-    # DB inspect command (sample and filter indexed docs; also supports stats)
-    inspect_parser = subparsers.add_parser("db-inspect", help="Inspect indexed documents or show aggregate stats for the semantic DB")
-    inspect_parser.add_argument("--limit", type=int, default=20, help="How many records to show (default: 20)")
-    inspect_parser.add_argument("--filter", dest="filter_text", help="Substring to match in title or creators")
-    inspect_parser.add_argument("--show-documents", action="store_true", help="Show beginning of stored document text")
-    inspect_parser.add_argument("--stats", action="store_true", help="Show aggregate stats (formerly db-stats)")
-    inspect_parser.add_argument("--config-path", help="Path to semantic search configuration file")
+    # Semantic search DB CLI commands (update-db / db-status / db-inspect) — DISABLED by Yun (semantic search removed)
+    # # Update database command
+    # update_db_parser = subparsers.add_parser("update-db", help="Update semantic search database")
+    # update_db_parser.add_argument("--force-rebuild", action="store_true",
+    #                              help="Force complete rebuild of the database")
+    # update_db_parser.add_argument("--limit", type=int,
+    #                              help="Limit number of items to process (for testing)")
+    # update_db_parser.add_argument("--fulltext", action="store_true",
+    #                              help="Extract fulltext content from local Zotero database (slower but more comprehensive)")
+    # update_db_parser.add_argument("--config-path",
+    #                              help="Path to semantic search configuration file")
+    # update_db_parser.add_argument("--db-path",
+    #                              help="Path to Zotero database file (zotero.sqlite), overrides config")
+    #
+    # # Database status command
+    # db_status_parser = subparsers.add_parser("db-status", help="Show semantic search database status")
+    # db_status_parser.add_argument("--config-path",
+    #                              help="Path to semantic search configuration file")
+    #
+    # # DB inspect command (sample and filter indexed docs; also supports stats)
+    # inspect_parser = subparsers.add_parser("db-inspect", help="Inspect indexed documents or show aggregate stats for the semantic DB")
+    # inspect_parser.add_argument("--limit", type=int, default=20, help="How many records to show (default: 20)")
+    # inspect_parser.add_argument("--filter", dest="filter_text", help="Substring to match in title or creators")
+    # inspect_parser.add_argument("--show-documents", action="store_true", help="Show beginning of stored document text")
+    # inspect_parser.add_argument("--stats", action="store_true", help="Show aggregate stats (formerly db-stats)")
+    # inspect_parser.add_argument("--config-path", help="Path to semantic search configuration file")
 
     # Update command
     update_parser = subparsers.add_parser("update", help="Update zotero-mcp to the latest version")

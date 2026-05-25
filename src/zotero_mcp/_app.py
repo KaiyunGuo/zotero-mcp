@@ -1,6 +1,6 @@
 """FastMCP application instance and server lifecycle."""
 
-import asyncio
+import asyncio  # noqa: F401 — only used by semantic-search background task (DISABLED by Yun); kept for easy re-enable
 import logging
 import os
 import sys
@@ -57,13 +57,14 @@ async def server_lifespan(server: FastMCP):
     """
     sys.stderr.write("Starting Zotero MCP server...\n")
 
-    async def _background_update():
-        try:
-            await asyncio.to_thread(_sync_semantic_update)
-        except Exception as e:
-            sys.stderr.write(f"Warning: Could not check semantic search auto-update: {e}\n")
-
-    asyncio.create_task(_background_update())
+    # Semantic search auto-update on startup — DISABLED by Yun (semantic search removed)
+    # async def _background_update():
+    #     try:
+    #         await asyncio.to_thread(_sync_semantic_update)
+    #     except Exception as e:
+    #         sys.stderr.write(f"Warning: Could not check semantic search auto-update: {e}\n")
+    #
+    # asyncio.create_task(_background_update())
 
     yield {}
 

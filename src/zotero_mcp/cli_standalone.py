@@ -100,17 +100,18 @@ def cmd_search(args):
             sort_by=args.sort_by, sort_direction=args.sort_direction,
             limit=args.limit, ctx=ctx,
         )
-    elif args.mode == "semantic":
-        filters = None
-        if getattr(args, "filters", None):
-            try:
-                filters = json.loads(args.filters)
-            except json.JSONDecodeError as e:
-                print(f"Error: invalid JSON in --filters: {e}", file=sys.stderr)
-                sys.exit(1)
-        result = search_mod.semantic_search(
-            query=args.query, limit=args.limit, filters=filters, ctx=ctx,
-        )
+    # Semantic search CLI mode — DISABLED by Yun (semantic search removed)
+    # elif args.mode == "semantic":
+    #     filters = None
+    #     if getattr(args, "filters", None):
+    #         try:
+    #             filters = json.loads(args.filters)
+    #         except json.JSONDecodeError as e:
+    #             print(f"Error: invalid JSON in --filters: {e}", file=sys.stderr)
+    #             sys.exit(1)
+    #     result = search_mod.semantic_search(
+    #         query=args.query, limit=args.limit, filters=filters, ctx=ctx,
+    #     )
     elif args.mode == "notes":
         result = annotations.search_notes(query=args.query, limit=args.limit, ctx=ctx)
     else:
@@ -536,8 +537,8 @@ def build_parser() -> argparse.ArgumentParser:
     # search
     s_p = sub.add_parser("search", help="Search your Zotero library", aliases=["s"])
     s_p.add_argument("query", nargs="?", default="", help="Search query")
-    s_p.add_argument("--mode", choices=["items", "tag", "citekey", "advanced", "semantic", "notes"],
-                     default="items", help="Search mode (default: items)")
+    s_p.add_argument("--mode", choices=["items", "tag", "citekey", "advanced", "notes"],
+                     default="items", help="Search mode (default: items)")  # "semantic" removed by Yun
     s_p.add_argument("--qmode", choices=["titleCreatorYear", "everything"],
                      default="titleCreatorYear")
     s_p.add_argument("--collection", help="Scope to a collection key")
@@ -691,23 +692,23 @@ def build_parser() -> argparse.ArgumentParser:
     dm.add_argument("--duplicate-keys", required=True)
     dm.add_argument("--dry-run", action="store_true")
 
-    # db
-    db_p = sub.add_parser("db", help="Manage the semantic search database")
-    db_sub = db_p.add_subparsers(dest="subcommand")
-    dbu = db_sub.add_parser("update")
-    dbu.add_argument("--force-rebuild", action="store_true")
-    dbu.add_argument("--limit", type=int)
-    dbu.add_argument("--fulltext", action="store_true")
-    dbu.add_argument("--config-path")
-    dbu.add_argument("--db-path")
-    dbs = db_sub.add_parser("status")
-    dbs.add_argument("--config-path")
-    dbi = db_sub.add_parser("inspect")
-    dbi.add_argument("--limit", type=int, default=20)
-    dbi.add_argument("--filter-text")
-    dbi.add_argument("--show-documents", action="store_true")
-    dbi.add_argument("--stats", action="store_true")
-    dbi.add_argument("--config-path")
+    # db — semantic search database management — DISABLED by Yun (semantic search removed)
+    # db_p = sub.add_parser("db", help="Manage the semantic search database")
+    # db_sub = db_p.add_subparsers(dest="subcommand")
+    # dbu = db_sub.add_parser("update")
+    # dbu.add_argument("--force-rebuild", action="store_true")
+    # dbu.add_argument("--limit", type=int)
+    # dbu.add_argument("--fulltext", action="store_true")
+    # dbu.add_argument("--config-path")
+    # dbu.add_argument("--db-path")
+    # dbs = db_sub.add_parser("status")
+    # dbs.add_argument("--config-path")
+    # dbi = db_sub.add_parser("inspect")
+    # dbi.add_argument("--limit", type=int, default=20)
+    # dbi.add_argument("--filter-text")
+    # dbi.add_argument("--show-documents", action="store_true")
+    # dbi.add_argument("--stats", action="store_true")
+    # dbi.add_argument("--config-path")
 
     # library
     lib_p = sub.add_parser("library", help="Switch or list libraries")
@@ -737,7 +738,7 @@ _CMD_MAP = {
     "tags": cmd_tags,
     "edit": cmd_edit,
     "duplicates": cmd_duplicates,
-    "db": cmd_db,
+    # "db": cmd_db,  # semantic search DB — DISABLED by Yun
     "library": cmd_library,
     "outline": cmd_outline,
 }
