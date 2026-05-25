@@ -40,8 +40,17 @@ _Updated: 2026-05-25_
   - ✅ `create_note` markdown 子笔记:parentItem 正确,h1/h2/h3/strong/em/ul/ol/code/a/table 全部渲染正确(raw_html 读回确认)
 - **新发现(待 spike)**:add_by_doi 经 web API 上传 PDF → 落点疑为 **Zotero 云存储**;Yun 桌面文件 sync 走 **WebDAV** → 两者不相交,MCP 传的 PDF 可能既不进 WebDAV、桌面也同步不下来。get_item_fulltext 只查 local+WebDAV 故取不到。需确认是**同步时序**还是**上传路径结构错配**;前者等桌面 sync 后重试即可,后者需改 add_by_doi 上传走 WebDAV 或改用 Zotero 云存储配额。
 
+## 测试基线(2026-05-25,Yun 决策)
+全套 `uv run --extra dev pytest -p no:cacheprovider` 基线 = **14 failed + 20 errors + 778 passed**。这 14+20 是**预期既有失败,不修、不重复排查**(Yun 定):
+- semantic 悬空测试(`test_description_tokens.py` 全 errors、`test_cli_standalone.py`/`test_lifespan.py`/`test_search_improvements.py` 的 semantic 项)= TASK-001 停语义遗留,语义功能不需要。
+- path 校验测试(`test_add_by_bibtex/csl_json` rejects_*、`test_local_db` absolute_path、`test_add_from_file` 2 项)= `os.path` monkeypatch 在 Win+Py3.13 的 harness bug。
+- 判回归只看**增量**(TASK-005 加了 +2 passed,无新失败)。
+
+## 合并(2026-05-25)
+分支 `rework/local-only-no-semantic`(TASK-001~005)已 **FF 合并回 main** 并 `git push origin main`(`55d43bb..f73b727`);本地特性分支已删。
+
 ## 待办 / 决策悬置
-- **PDF 上传落点 spike**(见上):确认 add_by_doi 的 PDF 是否最终对 WebDAV 桌面可达;决定是否改上传路径。
+- **PDF 上传落点 spike** 已落地为 TASK-005;**live e2e 待重启**(见 TASK-005)。
 - **独立 find_pdf 工具**:按 Yun 意延后(OA 级联已内嵌 add_by_doi);需要可补(给已入库缺 PDF 的条目补抓)。
 - **Local API only(D4)**:已改 hybrid;web/hybrid/WebDAV 代码保留(现在是必需,不再考虑删)。
 - **CLAUDE.md 未纳入版本控制**:被 upstream `.gitignore` 忽略,内容已更新但仅在本地。是否 force-add 待 Yun 定。
