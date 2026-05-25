@@ -15,8 +15,7 @@ _Updated: 2026-05-25_
 
 - [x] **TASK-002** Markdown 笔记写回 — 给 `create_note`/`update_note` 加 `content_format="markdown"`(默认),用 Python-Markdown(extra+sane_lists)把笔记体 markdown→HTML 后再写入 Zotero(原 D13)。raw HTML 透传。新增 `_markdown_to_html` 助手 + `markdown>=3.4` 依赖。验证:5 转换用例 + 15 个既有 note 测试通过 + **hybrid 端到端冒烟通过**(真实库建 markdown 子笔记→读回确认 parentItem 正确、h1/h2/ul/li/strong/a/code 渲染正确→永久删除不留痕)。
   `08159f1` feat: 笔记支持 markdown 写回 (TASK-002)
-- [x] **TASK-003** 按论文名入库流程 — Yun 定为 **skill/prompt 约定,不动代码**(保持 D11)。写了项目 skill `.claude/skills/use-zotero-mcp/SKILL.md`:name→DOI 由 LLM 解析(WebSearch/WebFetch/PubMed)→ add_by_doi;歧义停下问、重复 surface;笔记 markdown 写回;写操作需 hybrid。**注:`.claude/` 被 upstream .gitignore 忽略,skill 文件未入库(同 CLAUDE.md),是否 track 待 Yun 定。** 偏离 writing-skills 的 subagent baseline 测试(项目约定型 skill + Yun 禁止擅自 spawn subagent)。
-  (无代码 commit;skill 文件在 gitignore 内)
+- [x] **TASK-003** 按论文名入库流程 — Yun 定为 **skill/prompt 约定,不动代码**(保持 D11)。写了项目 skill `.claude/skills/use-zotero-mcp/SKILL.md`:name→DOI 由 LLM 解析(WebSearch/WebFetch/PubMed)→ add_by_doi;歧义停下问、重复 surface;笔记 markdown 写回;写操作需 hybrid。skill 已纳入版本控制(`.gitignore` 改为 `.claude/*` + `!.claude/skills/`,其余 .claude 仍忽略;CLAUDE.md 保持忽略)。偏离 writing-skills 的 subagent baseline 测试(项目约定型 skill + Yun 禁止擅自 spawn subagent)。
 
 ## 关键 spike 结论(2026-05-25,Zotero v9 实测)
 - **Zotero local `/api/` 只读**:POST 创建=400「Endpoint does not support method」;PATCH/DELETE=501「Method not implemented」。所有写操作必须走 web API 或 connector。

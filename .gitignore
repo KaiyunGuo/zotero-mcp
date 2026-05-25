@@ -42,4 +42,6 @@ uv.lock
 
 # Local project docs
 CLAUDE.md
-.claude/
+.claude/*
+# ...but track project skills (e.g. use-zotero-mcp)
+!.claude/skills/
