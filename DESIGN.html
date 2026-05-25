@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>zotero-mcp · Design Document</title>
+<style>
+  :root {
+    --bg: #fbfbfa; --fg: #2b2b2b; --muted: #6b6b6b; --accent: #7a4ec2;
+    --border: #e3e1dd; --code-bg: #f3f1ef; --ok: #2e7d32; --warn: #b8860b; --open: #1565c0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--fg); line-height: 1.65;
+    max-width: 880px; margin: 0 auto; padding: 48px 32px 96px;
+  }
+  h1 { font-size: 1.9rem; margin-bottom: 4px; }
+  h2 {
+    font-size: 1.3rem; margin-top: 44px; padding-bottom: 6px;
+    border-bottom: 2px solid var(--accent);
+  }
+  h3 { font-size: 1.05rem; margin-top: 28px; color: var(--accent); }
+  code {
+    background: var(--code-bg); padding: 1px 5px; border-radius: 3px;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 0.88em;
+  }
+  pre {
+    background: var(--code-bg); padding: 14px 16px; border-radius: 6px;
+    overflow-x: auto; font-size: 0.82rem; line-height: 1.5;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--border); padding: 8px 11px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); }
+  .sub { color: var(--muted); font-size: 0.95rem; margin-top: 0; }
+  .banner {
+    background: #fff8e6; border: 1px solid #e8d8a0; border-radius: 6px;
+    padding: 14px 18px; margin: 24px 0;
+  }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 0.78rem; font-weight: 600; }
+  .tag-ok { background: #e6f4e6; color: var(--ok); }
+  .tag-open { background: #e3effb; color: var(--open); }
+  .tag-warn { background: #fbf2dc; color: var(--warn); }
+  blockquote {
+    border-left: 3px solid var(--accent); margin: 16px 0; padding: 4px 16px;
+    color: var(--muted); background: #faf8fc;
+  }
+  .footer { margin-top: 64px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); padding-top: 16px; }
+</style>
+</head>
+<body>
+
+<h1>zotero-mcp — Design Document</h1>
+<p class="sub">一个从零自建的、Local-API-only 的 Zotero MCP server &nbsp;·&nbsp; 起草于 2026-05-14</p>
+
+<div class="banner">
+  <strong>⚠ 状态:DRAFT — brainstorming 进行中。</strong><br>
+  本文档由 <code>superpowers:brainstorming</code> 流程产出。
+  <strong>设计第 1–6 段全部 approved。</strong> 设计阶段完成。
+  下一步:写 spec → 自检 → Yun 评审 → 转 <code>writing-plans</code> skill。
+  完整决策与下一步见同目录 <code>HANDOFF.md</code>。
+</div>
+
+<h2>1. 目标与动机</h2>
+<p>
+现有的第三方包 <code>zotero-mcp-server</code> (0.3.0) 功能受限:约 5 个工具绕过配置而失效、
+子笔记挂不上(需 Web API 凭证)、不能触发 Zotero 的「Find Available PDF」、DB 路径自动探测在本机失效。
+其根因是 <em>它同时用 SQLite 直读和 Local API 两条通道,两者配置不一致</em>。
+</p>
+<p>
+Yun 的决定:<strong>不修补现有包,而是从零自建一个完全掌控的 zotero-mcp</strong>,
+按自己的文献工作流长期演进。核心工作流为:按论文名检索 → 入库 Zotero → 抽取全文 → 把阅读笔记写回 Zotero 条目(在 UI 中可见)。
+</p>
+
+<h2>2. 已锁定的决策</h2>
+<table>
+  <tr><th>#</th><th>决策</th><th>理由</th></tr>
+  <tr><td>D1</td><td><strong>从零自建</strong>,不修补现有包</td><td>Yun 要完全掌控代码库,按自己的工作流长期演进</td></tr>
+  <tr><td>D2</td><td>语言 = <strong>Python</strong></td><td>Yun 的编码规范全是 Python;MCP Python SDK(FastMCP)成熟</td></tr>
+  <tr><td>D3</td><td>仓库 = <strong>独立仓库</strong> <code>D:\Claude\zotero-mcp\</code></td><td>是工具不是研究内容</td></tr>
+  <tr><td>D4</td><td>连接通道 = <strong>Local API only</strong></td><td>单一代码路径;消灭"DB 路径探测 + SQLite schema 解析"这一整类拖垮旧包的 bug</td></tr>
+  <tr><td>D5</td><td>v1 范围 = <strong>全部 4 个能力包 + Find Available PDF</strong></td><td>检索/元数据/全文 + 入库 + 笔记读写 + 组织</td></tr>
+  <tr><td>D6</td><td>架构 = <strong>分层</strong>:<code>server.py</code> → <code>client.py</code> → pyzotero</td><td>工具体极薄;领域逻辑集中在 <code>ZoteroClient</code></td></tr>
+  <tr><td>D7</td><td>v1 <strong>不引入</strong> <code>models.py</code> 数据类</td><td>No premature abstractions</td></tr>
+  <tr><td>D8</td><td>配置 = <strong>极简</strong>:仅可选 Local API base URL</td><td>无 DB 路径、无 API key</td></tr>
+  <tr><td>D9</td><td>替换 <code>~/.claude.json</code> 全局 <code>zotero</code> 注册</td><td>此编辑需 Yun 手动完成</td></tr>
+  <tr><td>D10</td><td>citekey 支持 = <strong>BBT 软依赖</strong></td><td>读 citekey 走 Local API 的 <code>data.citationKey</code>;无 BBT 时 <code>search_by_citekey</code> 返回明确错误</td></tr>
+  <tr><td>D11</td><td><code>add_by_name</code> 不进 MCP;title→DOI 由 LLM WebFetch 完成</td><td>MCP 只做 Zotero 边界内的事</td></tr>
+  <tr><td>D12</td><td><code>find_pdf</code> = <strong>关键路径</strong></td><td><code>add_by_doi/url</code> 默认兜底;spike 优先级最高</td></tr>
+  <tr><td>D13</td><td>笔记 I/O = <strong>markdown 与 HTML 双路</strong></td><td><code>content_format</code> 参数选择,两路都开</td></tr>
+  <tr><td>D14</td><td>tag 操作 = <strong>合一</strong> <code>zotero_set_tags(mode=...)</code></td><td><code>mode = add / remove / replace</code></td></tr>
+  <tr><td>D15</td><td>重复条目 = <strong>surface,不 auto-merge</strong></td><td><code>add_by_*</code> 加 <code>force=False</code>;命中重复退回不入库。检测优先级 DOI &gt; URL &gt; 标题模糊(阈值 0.85)</td></tr>
+  <tr><td>D16</td><td>元数据更新 = <strong>narrow patch</strong> <code>zotero_update_item</code></td><td>仅 <code>mode="merge"</code>;LLM 自己 WebFetch 新元数据再调,与 D11 一脉相承</td></tr>
+  <tr><td>D17</td><td>Zotero 版本门 = <strong>硬抛错</strong></td><td>启动读到 <code>version &lt; 7.0</code> → 调写工具直接 <code>raise ZoteroVersionError</code>,无宽容模式。本机 v9 永远触发不到,保留作未来兜底</td></tr>
+  <tr><td>D18</td><td>日志默认 = <strong>WARNING</strong>(stderr)</td><td>env <code>ZOTERO_MCP_LOG=INFO/DEBUG</code> 切换。stdout 严禁写日志(留给 MCP JSON-RPC)</td></tr>
+  <tr><td>D19</td><td>测试 = <strong>两层金字塔</strong>(unit + live integration);<strong>不建 mock HTTP fixture 层</strong></td><td>单用户、Zotero 永远在跑;mock 漂移代价 &gt; 测试快收益。允许个别 error-path 用例 inline 用 <code>responses</code> 打补丁(网络超时、5xx、畸形 JSON 等真 Zotero 难触发的病理路径),不抽公共 fixture</td></tr>
+  <tr><td>D20</td><td>测试隔离 = <strong>dedicated collection</strong> <code>__zotero_mcp_test__</code> + <code>__test__</code> tag + teardown</td><td>共用日常 library;不上专用 Zotero profile(YAGNI;profile 漂移反而掩盖真实 bug)</td></tr>
+  <tr><td>D21</td><td>TDD 姿态 = <strong>混合</strong>(纯逻辑严格 TDD / client.py 测试伴随 / server.py 滞后到 e2e)</td><td>按文件性质分:纯函数零摩擦严格 TDD;client.py 严格 TDD 会被 Zotero 状态拖死;server.py 薄壳 unit 测 mock 价值低,e2e 更划算</td></tr>
+  <tr><td>D22</td><td>v1 <strong>不上 CI</strong>;本地 git <strong>pre-commit hook</strong> 跑 <code>pytest tests/unit/</code></td><td>单用户私库,CI 的协作把关价值不存在;pre-commit 比 CI 早一步拦截倒退。未来转公开/多人时再加 unit-only CI</td></tr>
+</table>
+
+<h2>3. 方案对比(为何选 Local API only)</h2>
+<table>
+  <tr><th>方案</th><th>说明</th><th>结论</th></tr>
+  <tr><td><strong>B — Local API only</strong></td><td>所有读写都走 <code>localhost:23119/api/</code></td><td><span class="tag tag-ok">✓ 已选</span> 单路径;消灭旧包栽过的 bug 类;子笔记原生支持</td></tr>
+  <tr><td>A — Hybrid</td><td>SQLite 直读 + Local API 写</td><td><span class="tag tag-warn">✗ 否决</span> 两套代码路径;重引入 SQLite 路径探测+schema 解析</td></tr>
+  <tr><td>C — Web API 为主</td><td>走 <code>api.zotero.org</code></td><td><span class="tag tag-warn">✗ 否决</span> 需 API key、依赖网络</td></tr>
+</table>
+
+<h2>4. 架构(设计第 1 段 — ✅ approved 2026-05-14)</h2>
+<pre><code>MCP client (Claude Code)
+      │  stdio
+      ▼
+server.py        ← FastMCP,定义 22 个工具,工具体极薄:参数校验 + 委派
+      ▼
+client.py        ← ZoteroClient:把 Zotero Local API 包装成领域方法
+      ▼
+pyzotero (local=True)  ← 仅作传输层:分页、userID-0 怪癖、HTTP 重试
+      ▼
+Zotero Local API   http://localhost:23119/api/
+
+      [可选旁路]  BBT JSON-RPC   http://localhost:23119/better-bibtex/json-rpc
+                  └─ 启动探测一次,缓存能力 flag;用于 search_by_citekey</code></pre>
+
+<h3>模块划分</h3>
+<table>
+  <tr><th>文件</th><th>职责</th></tr>
+  <tr><td><code>pyproject.toml</code></td><td>打包 + console-script 入口 <code>zotero-mcp</code></td></tr>
+  <tr><td><code>zotero_mcp/server.py</code></td><td>MCP 工具定义,薄</td></tr>
+  <tr><td><code>zotero_mcp/client.py</code></td><td><code>ZoteroClient</code>——Local API 的领域封装</td></tr>
+  <tr><td><code>zotero_mcp/formatting.py</code></td><td>JSON↔markdown 渲染 + 笔记 md↔html 转换</td></tr>
+  <tr><td><code>zotero_mcp/config.py</code></td><td>环境变量驱动:base URL、超时、全文页数上限</td></tr>
+  <tr><td><code>zotero_mcp/errors.py</code></td><td>错误类型 + 预检 + BBT 能力探测</td></tr>
+  <tr><td><code>tests/</code></td><td>pytest</td></tr>
+</table>
+
+<h2>5. 工具清单(设计第 2 段 — ✅ approved 2026-05-14)</h2>
+<p>v1 共 <strong>22 个工具</strong>。</p>
+
+<h3>Bundle 1 · 检索 / 元数据 / 全文(6)</h3>
+<table>
+  <tr><th>工具</th><th>签名</th><th>备注</th></tr>
+  <tr><td><code>zotero_search</code></td><td><code>(query, qmode="titleCreatorYear", item_type=None, tag=None, collection_key=None, limit=10)</code></td><td>BBT 可用时每项带 citekey</td></tr>
+  <tr><td><code>zotero_search_by_citekey</code></td><td><code>(citekey)</code></td><td>需 BBT</td></tr>
+  <tr><td><code>zotero_get_item</code></td><td><code>(item_key, include_abstract=True)</code></td><td>item_key 接受 Zotero key 或 citekey</td></tr>
+  <tr><td><code>zotero_get_children</code></td><td><code>(item_key)</code></td><td>列子条目</td></tr>
+  <tr><td><code>zotero_get_fulltext</code></td><td><code>(item_key, max_pages=None)</code></td><td>自动找 PDF 附件</td></tr>
+  <tr><td><code>zotero_get_recent</code></td><td><code>(limit=10)</code></td><td>—</td></tr>
+</table>
+
+<h3>Bundle 2 · 入库与元数据更新(4)</h3>
+<table>
+  <tr><th>工具</th><th>签名</th><th>备注</th></tr>
+  <tr><td><code>zotero_add_by_doi</code></td><td><code>(doi, attach_pdf=True, find_pdf_fallback=True, force=False, collection_key=None)</code></td><td>无 PDF 时自动调 find_pdf;<code>force=False</code> 撞重复退回(D15)</td></tr>
+  <tr><td><code>zotero_add_by_url</code></td><td><code>(url, attach_pdf=True, find_pdf_fallback=True, force=False, collection_key=None)</code></td><td>dry-run translator 拿 DOI 查重,失败降级 URL 精确匹配</td></tr>
+  <tr><td><code>zotero_add_from_file</code></td><td><code>(file_path, item_type="document", title=None, force=False)</code></td><td>抽 DOI 查重;无 DOI 时降级标题模糊(阈值 0.85)</td></tr>
+  <tr><td><code>zotero_update_item</code></td><td><code>(item_key, fields, mode="merge")</code></td><td>D16;v1 仅 <code>mode="merge"</code></td></tr>
+</table>
+
+<h3>Bundle 3 · 笔记(4)</h3>
+<table>
+  <tr><th>工具</th><th>签名</th></tr>
+  <tr><td><code>zotero_create_note</code></td><td><code>(parent_item_key, content, title=None, tags=None, content_format="markdown")</code></td></tr>
+  <tr><td><code>zotero_update_note</code></td><td><code>(note_key, content, title=None, content_format="markdown")</code></td></tr>
+  <tr><td><code>zotero_get_notes</code></td><td><code>(item_key, format="markdown")</code></td></tr>
+  <tr><td><code>zotero_delete_note</code></td><td><code>(note_key)</code></td></tr>
+</table>
+
+<h3>Bundle 4 · 组织(7)</h3>
+<table>
+  <tr><th>工具</th><th>签名</th></tr>
+  <tr><td><code>zotero_list_collections</code></td><td><code>()</code></td></tr>
+  <tr><td><code>zotero_create_collection</code></td><td><code>(name, parent_key=None)</code></td></tr>
+  <tr><td><code>zotero_add_to_collection</code></td><td><code>(item_key, collection_key)</code></td></tr>
+  <tr><td><code>zotero_remove_from_collection</code></td><td><code>(item_key, collection_key)</code></td></tr>
+  <tr><td><code>zotero_list_tags</code></td><td><code>()</code></td></tr>
+  <tr><td><code>zotero_set_tags</code></td><td><code>(item_key, tags, mode="add")</code></td></tr>
+  <tr><td><code>zotero_get_annotations</code></td><td><code>(item_key)</code></td></tr>
+</table>
+
+<h3>实验性 · Find Available PDF(1)</h3>
+<table>
+  <tr><th>工具</th><th>签名</th><th>状态</th></tr>
+  <tr><td><code>zotero_find_pdf</code></td><td><code>(item_key)</code></td><td>🧪 EXPERIMENTAL · <strong>关键路径</strong>。spike 优先级最高</td></tr>
+</table>
+
+<h3>统一返回形状</h3>
+<table>
+  <tr><th>实体</th><th>字段</th></tr>
+  <tr><td>Item</td><td><code>{key, citekey?, type, title, creators, year, doi, url, abstract?, tags, collection_keys, attachment_keys}</code></td></tr>
+  <tr><td>Note</td><td><code>{key, parent_key, parent_citekey?, title, content_md, tags, date_modified}</code></td></tr>
+  <tr><td>Annotation</td><td><code>{key, parent_attachment_key, parent_citekey?, type, page, text, comment, color, date_modified}</code></td></tr>
+  <tr><td>Collection</td><td><code>{key, name, parent_key?, item_count}</code></td></tr>
+  <tr><td>Duplicate result</td><td><code>{added:false, reason:"duplicate_found", matched_by, duplicates:[Item...], hint}</code></td></tr>
+</table>
+
+<h2>6. 数据流(设计第 3 段 — ✅ approved 2026-05-15)</h2>
+<p>用核心工作流当代表示例:<strong>「论文名 → 入库 → 读全文 → 写阅读笔记回去」</strong>。一次穿过 4 个 Bundle + find_pdf + WebFetch 边界 + D15 查重。</p>
+
+<h3>端到端流程</h3>
+<pre><code>┌─────────┐  ┌────────────────────┐  ┌──────────────────────┐  ┌────────┐
+│  Yun    │  │ Claude Code (LLM)  │  │ zotero-mcp (server)  │  │ Zotero │
+└────┬────┘  └──────────┬─────────┘  └──────────┬───────────┘  └────┬───┘
+     │  "读 Tran 2019" │                       │                    │
+     ├────────────────►│ ① WebFetch CrossRef → 拿到 DOI            │
+     │                 │                       │                    │
+     │                 │ ② zotero_add_by_doi(doi)                   │
+     │                 ├──────────────────────►│ ②.0 查重 DOI       │
+     │                 │                       ├───────────────────►│
+     │                 │                       │ 无 → 继续           │
+     │                 │                       │ ②.1 POST translator│
+     │                 │                       ├───────────────────►│
+     │                 │                       │ 无 PDF → ②.2 find_pdf 兜底
+     │                 │                       ├───────────────────►│
+     │                 │◄──────────────────────┤ {key, citekey?,…}  │
+     │                 │                                            │
+     │                 │ ③ zotero_get_fulltext(item_key)            │
+     │                 ├──────────────────────►├───────────────────►│
+     │                 │◄──────────────────────┤◄───────────────────┤
+     │ [LLM 起草 markdown 笔记]                                     │
+     │                 │ ④ zotero_create_note(parent, md, fmt=md)   │
+     │                 ├──────────────────────►│ md → html 内部转换 │
+     │                 │                       ├───────────────────►│
+     │ Zotero UI 见✓   │◄──────────────────────┤◄───────────────────┤</code></pre>
+
+<h3>关键边界</h3>
+<table>
+  <tr><th>步</th><th>谁负责</th><th>边界依据</th></tr>
+  <tr><td>① name→DOI</td><td>LLM (WebFetch)</td><td>D11:元数据查询不属于 Zotero 边界</td></tr>
+  <tr><td>②.0 查重</td><td>MCP 内部</td><td>D15:DOI &gt; URL &gt; 标题模糊;命中即返回不入库</td></tr>
+  <tr><td>②.2 find_pdf 兜底</td><td>MCP 内部自动</td><td>D12:对 LLM 透明</td></tr>
+  <tr><td>③ 抽全文</td><td>MCP → Local API</td><td>自动找 PDF 附件</td></tr>
+  <tr><td>④ 笔记格式</td><td>LLM 选 md 或 HTML;md 时 MCP 转换</td><td>D13:两路都开</td></tr>
+  <tr><td>④ 子笔记挂载</td><td>MCP → <code>POST /items</code> 带 <code>parentItem</code></td><td>修复旧包最大痛点</td></tr>
+</table>
+
+<h3>降级分支(都不阻塞工作流)</h3>
+<table>
+  <tr><th>异常</th><th>处置</th></tr>
+  <tr><td>Zotero 未运行</td><td>预检 raise <code>ZoteroNotRunningError</code></td></tr>
+  <tr><td>BBT 未装</td><td>citekey=null;<code>search_by_citekey</code> 单独 raise</td></tr>
+  <tr><td>查重命中(D15)</td><td>return <code>{added:false, duplicates:[...]}</code></td></tr>
+  <tr><td>find_pdf 不可触发</td><td>return <code>{has_attachment:false, hint:"manual attach"}</code></td></tr>
+  <tr><td>全文未索引</td><td>return <code>{text:null, hint}</code></td></tr>
+</table>
+
+<h3>元数据更新工作流(D16)</h3>
+<pre><code>get_item(key)         → 当前 fields
+WebFetch CrossRef     → 最新 fields(D11)
+LLM 对比并告知差异
+Yun 确认 → update_item(key, fields={…}, mode="merge")
+server: PATCH /items/{key}</code></pre>
+
+<h2>7. 错误处理(设计第 4 段 — ✅ approved 2026-05-15)</h2>
+
+<h3>7.1 错误分类(<code>errors.py</code>)</h3>
+<pre><code>ZoteroMCPError                      # 基类
+├─ ZoteroNotRunningError            # 连不上 localhost:23119
+├─ ZoteroVersionError               # Zotero < 7.0(写操作)
+├─ LocalAPIError                    # 通用 HTTP
+│   ├─ ItemNotFoundError            # 404
+│   ├─ ValidationError              # 400 / 412
+│   └─ ServerError                  # 5xx
+├─ TranslatorError                  # translator 解 DOI/URL 失败
+├─ BBTUnavailableError              # 仅 search_by_citekey 显式需要
+└─ FindPDFNotSupportedError         # spike 结论:API 不可触发</code></pre>
+
+<h3>7.2 预检的两层架构</h3>
+<table>
+  <tr><th>层</th><th>时机</th><th>内容</th><th>缓存</th></tr>
+  <tr><td><strong>启动预检</strong></td><td>server 启动一次</td><td>① Local API 可达 ② Zotero 版本 ③ BBT JSON-RPC ④ (spike 后) find_pdf</td><td><code>capabilities</code> 字典,写 stderr</td></tr>
+  <tr><td><strong>每调用预检</strong></td><td>每次 tool 调用入口</td><td>一次便宜的 HTTP ping;失败则重跑启动预检</td><td>不缓存</td></tr>
+</table>
+<p>启动日志样例:<code>[zotero-mcp] zotero_running=True version=9.0.x bbt_available=True find_pdf=&lt;pending spike&gt;</code></p>
+
+<h3>7.3 HTTP 错误映射</h3>
+<table>
+  <tr><th>HTTP / 异常</th><th>映射成</th><th>用户可见 hint</th></tr>
+  <tr><td>ConnectionRefused / Timeout</td><td><code>ZoteroNotRunningError</code></td><td>"Zotero is not running on localhost:23119. Please start Zotero."</td></tr>
+  <tr><td>404</td><td><code>ItemNotFoundError</code></td><td>"Item not found: <code>&lt;key&gt;</code>"</td></tr>
+  <tr><td>400 / 412</td><td><code>ValidationError</code></td><td>透传 Zotero 错误消息</td></tr>
+  <tr><td>403</td><td><code>LocalAPIError</code></td><td>"Local API may require enabling in Zotero → Settings → Advanced"</td></tr>
+  <tr><td>5xx</td><td><code>ServerError</code></td><td>"Zotero internal error; retry or restart Zotero"</td></tr>
+</table>
+
+<h3>7.4 ⭐ Return vs Raise 纪律</h3>
+<table>
+  <tr><th>类</th><th>情况</th></tr>
+  <tr><td><strong>Raise</strong>("动作未完成")</td><td>Zotero 没开 / item 不存在 / 版本 &lt; 7.0(D17)/ 校验失败 / 5xx / BBT 显式必需但未装</td></tr>
+  <tr><td><strong>Return</strong>("动作完成,结果信息丰富")</td><td>撞重复(D15);find_pdf 没找到;全文未索引;BBT 未装时 citekey=null</td></tr>
+</table>
+<blockquote>规则:<strong>raise = 动作未完成;return = 动作完成,结果信息丰富。</strong> 把"撞重复"错抛会让 LLM 误判失败盲目重试;把"Zotero 没开"当 return 会让 LLM 拿空数据继续。</blockquote>
+
+<h3>7.5 Zotero 版本门(D17)</h3>
+<ul>
+  <li>启动预检读到 <code>version &lt; 7.0</code> → 所有写工具不可用</li>
+  <li>调写工具时直接 <code>raise ZoteroVersionError</code>(硬抛,无宽容模式)</li>
+  <li>读工具不受影响——6.x 也能读</li>
+  <li>本机 v9 远超门槛,这条门主要作未来兜底</li>
+</ul>
+
+<h3>7.6 日志(D18)</h3>
+<ul>
+  <li>stdout 留给 MCP JSON-RPC——<strong>绝不写日志到 stdout</strong></li>
+  <li>所有日志走 <strong>stderr</strong>,默认 <strong>WARNING</strong></li>
+  <li>env <code>ZOTERO_MCP_LOG=INFO/DEBUG</code> 切换</li>
+  <li>启动时无条件写一次 capability 行</li>
+</ul>
+
+<h2>8. 测试策略(设计第 5 段 — ✅ approved 2026-05-19)</h2>
+
+<h3>8.1 两层金字塔(D19)</h3>
+<table>
+  <tr><th>层</th><th>位置</th><th>性质</th><th>速度</th></tr>
+  <tr><td>unit</td><td><code>tests/unit/</code></td><td>纯函数,无 Zotero,无 HTTP</td><td>全跑 &lt; 1s</td></tr>
+  <tr><td>live integration</td><td><code>tests/integration/</code></td><td>真打 <code>localhost:23119</code>,每个 MCP 工具至少 1 个 smoke</td><td>全跑数秒</td></tr>
+</table>
+<p><strong>不建立通用 mock HTTP fixture / cassette 层。</strong>砍掉的理由:单用户、Zotero 永远在跑,mock 与真 Zotero 形状漂移的代价大于"测试快"的收益,且会培养"绿测 = 安全"的错觉。
+<strong>但允许在个别 error-path 测试里 inline 使用 <code>responses</code> 库打补丁</strong>(网络超时、服务端 5xx、畸形 JSON 等真 Zotero 难触发的病理路径),不抽取公共 fixture。</p>
+
+<h3>8.2 测试隔离(D20)</h3>
+<p>共用 Yun 日常 Zotero library——不上专用 Zotero profile(YAGNI;profile 漂移反而掩盖真实 bug)。三层防护:</p>
+<ol>
+  <li>所有测试创建的 item / note 进固定 collection <code>__zotero_mcp_test__</code>(<code>conftest.py</code> session fixture 启动时确保存在)</li>
+  <li>每个测试对象打 <code>__test__</code> tag,便于事后人工清理残留</li>
+  <li>用例 teardown 删除自己创建的 item;最终残留靠 tag 兜底批量清理</li>
+</ol>
+<p>查询类工具的断言里加 collection / tag 过滤,避免日常库真数据干扰。</p>
+
+<h3>8.3 TDD 姿态(D21)</h3>
+<table>
+  <tr><th>文件</th><th>性质</th><th>姿态</th></tr>
+  <tr><td><code>formatting.py</code> / <code>errors.py</code> / <code>config.py</code></td><td>纯函数</td><td><strong>严格 TDD</strong>:先红 → 绿 → 重构</td></tr>
+  <tr><td><code>client.py</code></td><td>领域逻辑 + I/O</td><td><strong>测试伴随</strong>:每个方法 land 前必须有 ≥1 integration smoke</td></tr>
+  <tr><td><code>server.py</code></td><td>MCP 工具薄壳</td><td><strong>滞后</strong>:client 方法都覆盖后再补 e2e workflow 测试</td></tr>
+</table>
+
+<h3>8.4 capability-gated 测试</h3>
+<p>BBT / find_pdf 相关测试在 <code>conftest.py</code> 探测 capability flag;不可用时 <code>pytest.skip(...)</code>。和 §7.2 启动预检共用同一份探测逻辑(实现层面提取一个 <code>probe_capabilities()</code>,启动和测试都调用)。</p>
+
+<h3>8.5 CI 策略(D22)</h3>
+<ul>
+  <li>v1 <strong>不配 GitHub Actions</strong>——单用户、私库,CI 的协作把关价值不存在</li>
+  <li>本地 <strong>git pre-commit hook</strong> 跑 <code>pytest tests/unit/</code>,commit 前拦截倒退</li>
+  <li>integration 全程手动跑(<code>pytest tests/integration/</code>)</li>
+  <li>未来项目转公开 / 多人时再加 CI(仅 unit)</li>
+</ul>
+
+<h3>8.6 目录结构</h3>
+<pre><code>tests/
+├── conftest.py            # session fixtures、capability 探测、teardown
+├── unit/
+│   ├── test_formatting.py
+│   ├── test_errors.py
+│   ├── test_config.py
+│   └── test_duplicates.py
+├── integration/
+│   ├── test_search.py
+│   ├── test_add.py
+│   ├── test_notes.py
+│   ├── test_organize.py
+│   ├── test_update_item.py
+│   └── test_workflow_e2e.py
+└── fixtures/
+    └── sample_items.py    # 真要创建到 Zotero 的 item 模板(不是 mock 响应)</code></pre>
+
+<h2>9. 环境事实</h2>
+<ul>
+  <li>Zotero 安装在 <code>D:\Program Files\Zotero\</code>(data dir == install dir)</li>
+  <li><strong>Zotero 版本:v9</strong>(2026-05-15 更新)。远超 7.0 最低门;v9 changelog 中关于 Local API 新增端点(尤其 find_pdf / update metadata 等客户端动作的 API 暴露)需在 spike #1 复查</li>
+  <li>旧包:<code>zotero-mcp-server</code> 0.3.0,exe 在 <code>C:\Users\yun\AppData\Roaming\Python\Python311\Scripts\zotero-mcp.exe</code></li>
+  <li>本机 Local API(端口 23119)确认可达;Local API 写操作经旧包在更早 Zotero 版本确认可用——v9 上需重新冒烟测试</li>
+  <li>Yun 不要 semantic search</li>
+  <li>BBT 安装状态:<em>未知</em>(D10 软依赖兼容)</li>
+</ul>
+
+<h2>10. 开放设计项</h2>
+<table>
+  <tr><th>段</th><th>内容</th><th>状态</th></tr>
+  <tr><td>设计第 1 段</td><td>架构与模块划分</td><td><span class="tag tag-ok">✅ approved</span></td></tr>
+  <tr><td>设计第 2 段</td><td>工具清单(22 个)</td><td><span class="tag tag-ok">✅ approved</span></td></tr>
+  <tr><td>设计第 3 段</td><td>数据流</td><td><span class="tag tag-ok">✅ approved</span></td></tr>
+  <tr><td>设计第 4 段</td><td>错误处理</td><td><span class="tag tag-ok">✅ approved</span></td></tr>
+  <tr><td>设计第 5 段</td><td>测试策略</td><td><span class="tag tag-ok">✅ approved</span></td></tr>
+  <tr><td>设计第 6 段</td><td>风险细化</td><td><span class="tag tag-ok">✅ approved</span></td></tr>
+  <tr><td>下一步</td><td><strong>写 spec → 自检 → Yun 评审 → 转 <code>writing-plans</code></strong></td><td><span class="tag tag-open">进行中</span></td></tr>
+</table>
+
+<h2>11. 风险细化(设计第 6 段 — ✅ approved 2026-05-19)</h2>
+<p>对每一项 spike,锁定:<strong>何时做 · 验什么 · 通过判据 · 不通过的 Plan B</strong>。</p>
+
+<h3>11.1 Spike 1 — <code>find_pdf</code> 可行性 ⭐(D12 关键路径)</h3>
+<table>
+  <tr><td><strong>何时</strong></td><td>写代码前 <strong>最优先</strong>(决定 <code>add_by_doi/url</code> 默认 <code>find_pdf_fallback=True</code> 是否站得住)</td></tr>
+  <tr><td><strong>验什么</strong></td><td>Zotero v9 是否暴露 Local API 端点能从外部触发"Find Available PDF"(等价于 UI 右键菜单那条动作)</td></tr>
+  <tr><td><strong>方法</strong></td><td>① 查 v9 changelog 和 Local API docs<br>② 试 <code>POST</code> 候选端点(<code>/items/{KEY}/findAttachment</code> 之类)<br>③ 翻 BBT JSON-RPC 是否代理该动作<br>④ 翻社区 issue / PR(zotero-better-bibtex / zotero-cli)</td></tr>
+  <tr><td><strong>通过判据</strong></td><td>Python 一行 HTTP 调用,Zotero 在 ≤10s 内为指定 item 抓回 PDF 附件并出现在 UI</td></tr>
+  <tr><td><strong>Plan B</strong></td><td>端点不存在 → <code>zotero_find_pdf</code> 工具保留但 raise <code>FindPDFNotSupportedError</code>(§7.1 已为此准备);<code>add_by_doi/url</code> 默认 <code>find_pdf_fallback=False</code>;<strong>§6 数据流图删去 ②.2 兜底支</strong></td></tr>
+  <tr><td><strong>Plan C(扩边界)</strong></td><td>Python 端走 Unpaywall / openaccessbutton 自抓 PDF → 调 Local API 附加。<em>扩 v1 范围,需先与 Yun 讨论</em></td></tr>
+</table>
+
+<h3>11.2 Spike 2 — pyzotero <code>local=True</code> 写支持</h3>
+<table>
+  <tr><td><strong>何时</strong></td><td><code>client.py</code> 写方法落地前(实现期早期 gate)</td></tr>
+  <tr><td><strong>验什么</strong></td><td><code>pyzotero.Zotero(..., local=True).create_items / .update_item / .delete_item</code> 是否真打到 <code>localhost:23119/api/</code> 并成功</td></tr>
+  <tr><td><strong>方法</strong></td><td>在 <code>__zotero_mcp_test__</code> collection 里 CRUD 一个 dummy item;抓包确认请求落点</td></tr>
+  <tr><td><strong>通过判据</strong></td><td>三种写都返回 2xx 且 Zotero UI 可见</td></tr>
+  <tr><td><strong>Plan B</strong></td><td>不支持 → 写路径绕开 pyzotero,直接 <code>httpx.put/post</code>;读路径仍保留 pyzotero。D6 架构不变(pyzotero 仍仅作传输层,只是写不通过它)</td></tr>
+</table>
+
+<h3>11.3 Spike 3 — BBT JSON-RPC 形状</h3>
+<table>
+  <tr><td><strong>何时</strong></td><td>与 Spike 1 同批(都是 HTTP probe,30 分钟搞完)</td></tr>
+  <tr><td><strong>验什么</strong></td><td><code>search_by_citekey</code> 对应的 BBT JSON-RPC 方法名 + 参数 schema(候选:<code>item.search</code> / <code>item.citationkey</code> / <code>items.bibtex</code>)</td></tr>
+  <tr><td><strong>方法</strong></td><td>curl <code>POST http://localhost:23119/better-bibtex/json-rpc</code>,试候选方法 + 已知 citekey</td></tr>
+  <tr><td><strong>通过判据</strong></td><td>一次成功调用,从已知 citekey 拿回 Zotero item key</td></tr>
+  <tr><td><strong>Plan B</strong></td><td>BBT 没暴露该 RPC → <code>zotero_search_by_citekey</code> 改实现:全库拉一遍 item,Python 端按 <code>data.citationKey</code> 过滤(慢但通)。或直接 raise <code>BBTUnavailableError</code> 告诉用户走 <code>zotero_search(query=citekey, qmode="everything")</code></td></tr>
+</table>
+
+<h3>11.4 Spike 4 — Local API item JSON 中 citekey 字段位置</h3>
+<table>
+  <tr><td><strong>何时</strong></td><td>与 Spike 1 / 3 同批</td></tr>
+  <tr><td><strong>验什么</strong></td><td>GET <code>/users/0/items/{key}</code> 响应里 BBT citekey 在哪个 path(候选:<code>data.citationKey</code> / <code>data.extra</code> 含 <code>Citation Key: foo</code> 行 / 不出现)</td></tr>
+  <tr><td><strong>方法</strong></td><td>找一个本机已知有 BBT citekey 的 item,curl 看完整 JSON</td></tr>
+  <tr><td><strong>通过判据</strong></td><td>字段路径锁定(影响 §5 统一返回形状的 <code>citekey</code> 字段抽取实现)</td></tr>
+  <tr><td><strong>Plan B</strong></td><td>字段不直接暴露 → 启动时跑一次 BBT JSON-RPC 拉 citekey 映射进进程内缓存,<code>get_item</code> 用 key 反查。实现复杂度小升,接口形状不变</td></tr>
+</table>
+
+<h3>11.5 Spike 5 — Local API 全文覆盖度</h3>
+<table>
+  <tr><td><strong>何时</strong></td><td>integration 测试期(写完 <code>zotero_get_fulltext</code> 顺手验,不单独 spike)</td></tr>
+  <tr><td><strong>验什么</strong></td><td><code>/items/{KEY}/fulltext</code> 对三类 item 的行为:① 最近 indexed 过的 PDF ② 老 PDF(可能未 index)③ 刚 <code>add_by_doi</code> 几秒前的</td></tr>
+  <tr><td><strong>通过判据</strong></td><td>至少前两类返回有效 text;第三类失败可接受</td></tr>
+  <tr><td><strong>Plan B</strong></td><td>未索引时返回 <code>{text:null, hint:"open Zotero and let it finish indexing"}</code>(§6 现有降级表已覆盖)</td></tr>
+</table>
+
+<h3>11.6 Item 6 — <code>~/.claude.json</code> 替换(非 spike,流程项)</h3>
+<table>
+  <tr><td><strong>何时</strong></td><td>实现完成、本地 smoke 通过后</td></tr>
+  <tr><td><strong>谁</strong></td><td><strong>Yun 手动</strong>(D9;Claude 写入范围外)</td></tr>
+  <tr><td><strong>交付</strong></td><td>实现结束时 README 提供精确替换片段:<code>mcpServers.zotero</code> 的 <code>command / args / env</code> 成品 JSON,Yun 复制粘贴</td></tr>
+  <tr><td><strong>风险</strong></td><td>若 JSON merge 失败 → 老的 <code>zotero-mcp-server</code> 0.3.0 仍挂着;先 stop 旧 process 再编辑</td></tr>
+</table>
+
+<h3>11.7 执行排序(关键路径)</h3>
+<pre><code>[写 spec 前]   Spike 1 + 3 + 4   ← 一个 ~30 min 的 throwaway python 脚本一次跑完
+                │
+                ├─ Spike 1 不过 → 反向影响设计:§6 数据流图删 ②.2 find_pdf 兜底支
+                │                  add_by_doi/url 默认 find_pdf_fallback=False
+                └─ Spike 3 / 4 不过 → 实现微调,接口和工具清单不变
+
+[实现期 gate]   Spike 2           ← 写 client.py 写方法之前
+
+[integration]   Spike 5           ← 自然落在 test_get_fulltext
+
+[Yun 手动收尾]  Item 6            ← README 片段就位后</code></pre>
+<blockquote><strong>关键洞察</strong>:Spike 1 是唯一可能反向冲击设计的一项——不过会让 §6 数据流图改一笔;其余 4 项都是实现层微调,接口和工具清单不动。</blockquote>
+
+<div class="footer">
+  zotero-mcp · DESIGN.html · 由 superpowers:brainstorming 流程产出 · 设计第 1–6 段全部 approved · 设计阶段完成<br>
+  完整进度、决策日志、resume 指引见 <code>HANDOFF.md</code>。
+</div>
+
+</body>
+</html>
