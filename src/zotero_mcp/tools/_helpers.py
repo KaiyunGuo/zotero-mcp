@@ -420,6 +420,22 @@ def _normalize_arxiv_id(raw):
 # PDF / open-access helpers
 # ---------------------------------------------------------------------------
 
+def _extract_attachment_key(attach_result) -> str | None:
+    """Pull the new attachment item's 8-char key out of pyzotero's response.
+
+    ``Zupload.upload`` returns ``{"success": [...], "failure": [...], "unchanged": [...]}``
+    where each list element is the original payload dict with a ``key``
+    field populated on the items that landed.
+    """
+    if not isinstance(attach_result, dict):
+        return None
+    for status in ("success", "unchanged"):
+        for item in attach_result.get(status, []) or []:
+            if isinstance(item, dict) and item.get("key"):
+                return item["key"]
+    return None
+
+
 def _download_and_attach_pdf(write_zot, item_key, pdf_url, doi, ctx):
     """Download a PDF from a URL and attach it to a Zotero item."""
     try:
@@ -442,10 +458,26 @@ def _download_and_attach_pdf(write_zot, item_key, pdf_url, doi, ctx):
                 ctx.info("Downloaded file too small, likely not a real PDF")
                 return False
 
-            write_zot.attachment_both(
+            attach_result = write_zot.attachment_both(
                 [(filename, filepath)],
                 parentid=item_key,
             )
+
+            # For WebDAV-storage libraries, pyzotero's web-API upload targets
+            # Zotero Storage / S3, which a WebDAV-synced desktop never reads.
+            # Push the bytes to WebDAV too so the file is actually retrievable
+            # (mirrors the add_from_file path).
+            from zotero_mcp import webdav as _webdav
+            if _webdav.is_webdav_configured():
+                attachment_key = _extract_attachment_key(attach_result)
+                if attachment_key:
+                    try:
+                        _webdav.upload_attachment_to_webdav(
+                            attachment_key=attachment_key,
+                            file_path=filepath,
+                        )
+                    except Exception as webdav_err:
+                        ctx.info(f"WebDAV upload failed for {attachment_key}: {webdav_err}")
         return True
     except Exception as e:
         ctx.info(f"PDF download/attach failed: {e}")

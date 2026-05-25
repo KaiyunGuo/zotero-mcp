@@ -23,22 +23,6 @@ from zotero_mcp.tools import _helpers
 CROSSREF_TYPE_MAP = _helpers.CROSSREF_TYPE_MAP
 
 
-def _extract_attachment_key(attach_result) -> str | None:
-    """Pull the new attachment item's 8-char key out of pyzotero's response.
-
-    ``Zupload.upload`` returns ``{"success": [...], "failure": [...], "unchanged": [...]}``
-    where each list element is the original payload dict with a ``key``
-    field populated on the items that landed.
-    """
-    if not isinstance(attach_result, dict):
-        return None
-    for status in ("success", "unchanged"):
-        for item in attach_result.get(status, []) or []:
-            if isinstance(item, dict) and item.get("key"):
-                return item["key"]
-    return None
-
-
 @mcp.tool(
     name="zotero_batch_update_tags",
     description=(
@@ -2088,7 +2072,7 @@ def add_from_file(
             from zotero_mcp import webdav as _webdav
 
             if _webdav.is_webdav_configured():
-                attachment_key = _extract_attachment_key(attach_result)
+                attachment_key = _helpers._extract_attachment_key(attach_result)
                 if attachment_key:
                     try:
                         _webdav.upload_attachment_to_webdav(

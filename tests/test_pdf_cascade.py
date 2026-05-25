@@ -2,6 +2,7 @@
 _try_semantic_scholar, _try_pmc, _download_and_attach_pdf, _try_attach_oa_pdf)."""
 
 import json
+import os
 
 import pytest
 import requests
@@ -51,6 +52,8 @@ class _AttachZotero(FakeZotero):
 
     def attachment_both(self, files, parentid=None, **kwargs):
         self.attachments.append({"files": files, "parentid": parentid})
+        # Mirror pyzotero's Zupload result shape so _extract_attachment_key works.
+        return {"success": [{"key": "ATTACH01"}], "unchanged": [], "failure": []}
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +254,62 @@ class TestDownloadAndAttachPdf:
                                           "10.1234/test", dummy_ctx)
         assert result is False
         assert len(zot.attachments) == 0
+
+
+    def test_webdav_push_when_configured(self, monkeypatch, dummy_ctx):
+        """WebDAV configured -> downloaded PDF is pushed to WebDAV under the
+        new attachment key, while the temp file still exists."""
+        import zotero_mcp.webdav as _webdav
+        zot = _AttachZotero()
+
+        def fake_get(url, **kwargs):
+            return _FakeHTTPResponse(
+                200, content=b"%PDF-1.4 " + b"x" * 2000,
+                headers={"Content-Type": "application/pdf"},
+            )
+
+        monkeypatch.setattr(requests, "get", fake_get)
+        monkeypatch.setattr(_webdav, "is_webdav_configured", lambda: True)
+
+        calls = []
+
+        def fake_upload(attachment_key, file_path, **kwargs):
+            assert os.path.isfile(file_path), "temp PDF must still exist at upload"
+            calls.append((attachment_key, file_path))
+            return ("md5hex", 123)
+
+        monkeypatch.setattr(_webdav, "upload_attachment_to_webdav", fake_upload)
+
+        result = _download_and_attach_pdf(zot, "ITEM1", "https://x.com/f.pdf",
+                                          "10.1234/test", dummy_ctx)
+        assert result is True
+        assert len(zot.attachments) == 1
+        assert len(calls) == 1
+        assert calls[0][0] == "ATTACH01"
+
+    def test_no_webdav_push_when_not_configured(self, monkeypatch, dummy_ctx):
+        """WebDAV not configured -> no WebDAV upload attempted, attach still ok."""
+        import zotero_mcp.webdav as _webdav
+        zot = _AttachZotero()
+
+        def fake_get(url, **kwargs):
+            return _FakeHTTPResponse(
+                200, content=b"%PDF-1.4 " + b"x" * 2000,
+                headers={"Content-Type": "application/pdf"},
+            )
+
+        monkeypatch.setattr(requests, "get", fake_get)
+        monkeypatch.setattr(_webdav, "is_webdav_configured", lambda: False)
+
+        def boom(*args, **kwargs):
+            raise AssertionError("must not upload to WebDAV when not configured")
+
+        monkeypatch.setattr(_webdav, "upload_attachment_to_webdav", boom)
+
+        result = _download_and_attach_pdf(zot, "ITEM1", "https://x.com/f.pdf",
+                                          "10.1234/test", dummy_ctx)
+        assert result is True
+        assert len(zot.attachments) == 1
 
 
 # ---------------------------------------------------------------------------
