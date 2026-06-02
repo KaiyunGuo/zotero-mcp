@@ -48,6 +48,9 @@ _Updated: 2026-05-25_
 - [x] **TASK-007** 仓库做成 Claude Code plugin(只打包 skill,跨项目复用) — 本仓同时充当 plugin + marketplace:`.claude-plugin/plugin.json` + `.claude-plugin/marketplace.json`(name=zotero-mcp,plugin source=`./`,省略 version→每 commit 即新版)。skill 规范源迁至 `skills/use-zotero-mcp/SKILL.md`(原 `.claude/skills/` 项目级副本已删,避免遮蔽 plugin)。MCP 维持全局注册(plugin 不含 .mcp.json,密钥零暴露)。Codex 侧不装 plugin,靠仓库 `.agents/skills/` 副本,须与 plugin 版字节一致(规则写入 CLAUDE.md/AGENTS.md)。安装:`/plugin marketplace add KaiyunGuo/zotero-mcp` → `/plugin install zotero-mcp@zotero-mcp`,更新=`/plugin marketplace update zotero-mcp`。调用 `/zotero-mcp:use-zotero-mcp`。CLAUDE.md 本地 gitignore 未入库(仅 AGENTS.md 带 sync 规则)。
   `22a551a` feat: 仓库做成 Claude Code plugin 打包 skill (TASK-007)
 
+- [x] **TASK-008** 重写 README 为实用版 — 弃 upstream 通用/营销式文档,改为贴合 Yun fork 的实操:无语义搜索、hybrid+WebDAV、editable 安装、Claude Code(~/.claude.json) + Codex(~/.codex/config.toml,含 PYTHONUTF8=1) 注册、skill plugin 安装/更新、自定义工具(add_attachment/markdown notes/WebDAV OA PDF)。密钥占位符化。中文为主(与项目其余文档一致)。
+  `19149eb` docs: README 重写为实用版 (TASK-008)
+
 ## 测试基线(2026-05-25,Yun 决策)
 全套 `uv run --extra dev pytest -p no:cacheprovider` 基线 = **14 failed + 20 errors + 778 passed**。这 14+20 是**预期既有失败,不修、不重复排查**(Yun 定):
 - semantic 悬空测试(`test_description_tokens.py` 全 errors、`test_cli_standalone.py`/`test_lifespan.py`/`test_search_improvements.py` 的 semantic 项)= TASK-001 停语义遗留,语义功能不需要。
