@@ -40,6 +40,11 @@ _Updated: 2026-05-25_
   - ✅ `create_note` markdown 子笔记:parentItem 正确,h1/h2/h3/strong/em/ul/ol/code/a/table 全部渲染正确(raw_html 读回确认)
 - **新发现(待 spike)**:add_by_doi 经 web API 上传 PDF → 落点疑为 **Zotero 云存储**;Yun 桌面文件 sync 走 **WebDAV** → 两者不相交,MCP 传的 PDF 可能既不进 WebDAV、桌面也同步不下来。get_item_fulltext 只查 local+WebDAV 故取不到。需确认是**同步时序**还是**上传路径结构错配**;前者等桌面 sync 后重试即可,后者需改 add_by_doi 上传走 WebDAV 或改用 Zotero 云存储配额。
 
+- [x] **TASK-006** 附件挂现有条目(HTML 渲染笔记) — 新增 `zotero_add_attachment(item_key, file_path, title=None)`:把任意本地文件作 imported_file 附件挂到**现有条目**,复用 `attachment_both` + WebDAV(照搬 add_from_file 上传块)。动机:笔记 HTML 被 Zotero 净化(无 JS→MathJax 死),自包含 .html **附件**不净化、浏览器打开完美渲染公式/代码。补上「附件挂现有条目」这个先前缺口(add_from_file 只能新建条目;无任意扩展名)。无扩展名白名单、校验父条目存在、symlink/相对路径/缺文件均拒绝。`server.py` 注册新工具。**TDD**:test_add_attachment.py 11 项绿(happy/title 覆盖/任意扩展名/WebDAV 配/未配/失败 surface/4 校验路径)。test_pdf_cascade 全绿;test_add_from_file 2 失败为既有 Win/Py3.13 harness bug(非回归)。源文件 ruff 零错。
+  - **live e2e 待重启**:运行中 MCP server 内存是旧代码(editable 不热重载);重启后用真实条目跑 `zotero_add_attachment(item_key, 自包含 .html)`→确认 Zotero UI 见附件 + 浏览器打开 MathJax/高亮渲染 + `<KEY>.zip` 落 WebDAV。
+  - **MathJax caveat**:若 HTML 用 CDN 外链 MathJax,打开时仍需联网;要离线完美需内联 MathJax JS(工具不关心,生成端注意)。
+  `7c5e4f0` feat: zotero_add_attachment 挂文件到现有条目 (TASK-006)
+
 ## 测试基线(2026-05-25,Yun 决策)
 全套 `uv run --extra dev pytest -p no:cacheprovider` 基线 = **14 failed + 20 errors + 778 passed**。这 14+20 是**预期既有失败,不修、不重复排查**(Yun 定):
 - semantic 悬空测试(`test_description_tokens.py` 全 errors、`test_cli_standalone.py`/`test_lifespan.py`/`test_search_improvements.py` 的 semantic 项)= TASK-001 停语义遗留,语义功能不需要。
