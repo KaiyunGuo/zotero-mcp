@@ -112,6 +112,7 @@ from zotero_mcp.tools.write import (  # noqa: F401
     merge_duplicates,
     get_pdf_outline,
     add_from_file,
+    add_attachment,
     add_item_relation,
     remove_item_relation,
     add_by_bibtex,

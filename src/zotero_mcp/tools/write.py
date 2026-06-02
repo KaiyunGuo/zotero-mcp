@@ -2106,6 +2106,102 @@ def add_from_file(
         return f"Error adding from file: {e}"
 
 
+@mcp.tool(
+    name="zotero_add_attachment",
+    description=(
+        "Attach an EXISTING local file to an EXISTING Zotero item as a stored "
+        "(imported_file) attachment. The file is stored as-is and is NOT "
+        "sanitized, so a self-contained .html (MathJax formulas, code "
+        "highlighting) renders perfectly when opened from Zotero in a browser "
+        "— unlike zotero_create_note, whose HTML Zotero strips of scripts so "
+        "MathJax never runs. Use this for HTML reading notes, supplementary "
+        "files, or any local file you want to live under an existing item. "
+        "To import a NEW item from a PDF/EPUB file use zotero_add_from_file "
+        "instead. "
+        "item_key: 8-char key of the parent item to attach under. "
+        "file_path: ABSOLUTE path to the local file (relative paths and "
+        "symlinks are rejected). Any file type is allowed. "
+        "title: optional display name for the attachment (defaults to the "
+        "file's basename). "
+        "Requires a writable library (fails in local-only mode). On "
+        "WebDAV-storage libraries the bytes are pushed to WebDAV so the "
+        "attachment is actually retrievable from the desktop. "
+        "Example: zotero_add_attachment(item_key='ABCD1234', "
+        "file_path='D:/notes/paper.html')."
+    )
+)
+@with_zotero_api_lock
+def add_attachment(
+    item_key: str,
+    file_path: str,
+    title: str | None = None,
+    *,
+    ctx: Context
+) -> str:
+    try:
+        read_zot, write_zot = _helpers._get_write_client(ctx)
+    except ValueError as e:
+        return str(e)
+
+    try:
+        # Path validation — check symlink BEFORE resolving
+        if os.path.islink(file_path):
+            return "Error: Symlinks are not allowed for security reasons."
+        if not os.path.isabs(file_path):
+            return "Error: file_path must be an absolute path."
+        # Resolve ".." components after symlink check
+        file_path = os.path.realpath(file_path)
+        if not os.path.isfile(file_path):
+            return f"Error: File not found: {file_path}"
+
+        # Verify the parent item exists (clearer error than a raw API failure
+        # that would otherwise create an orphan top-level attachment).
+        try:
+            read_zot.item(item_key)
+        except Exception as e:
+            return f"Error: parent item `{item_key}` not found: {e}"
+
+        display_name = title or os.path.basename(file_path)
+        ctx.info(f"Attaching {file_path} to item {item_key}")
+
+        attach_result = write_zot.attachment_both(
+            [(display_name, file_path)],
+            parentid=item_key,
+        )
+        attach_info = f"File attached: {display_name}"
+
+        # WebDAV-storage libraries: pyzotero's web-API upload targets Zotero
+        # Storage / S3, which a WebDAV-synced desktop never reads. Push the
+        # bytes to WebDAV too (mirrors add_from_file / OA PDF cascade).
+        from zotero_mcp import webdav as _webdav
+
+        if _webdav.is_webdav_configured():
+            attachment_key = _helpers._extract_attachment_key(attach_result)
+            if attachment_key:
+                try:
+                    _webdav.upload_attachment_to_webdav(
+                        attachment_key=attachment_key,
+                        file_path=file_path,
+                    )
+                    attach_info = (
+                        f"File attached: {display_name} "
+                        f"(uploaded to WebDAV as {attachment_key}.zip)"
+                    )
+                except Exception as webdav_err:
+                    attach_info = (
+                        f"File attached: {display_name} "
+                        f"(WARNING: WebDAV upload failed — {webdav_err}; "
+                        f"attachment {attachment_key} exists but has no file bytes "
+                        f"on WebDAV)"
+                    )
+
+        return f"Item key: `{item_key}`\n{attach_info}"
+
+    except Exception as e:
+        ctx.error(f"Error attaching file: {e}")
+        return f"Error attaching file: {e}"
+
+
 def _build_relation_uri(library_type: str, library_id: str, item_key: str) -> str:
     """Build a Zotero relation URI for the given item.
 
