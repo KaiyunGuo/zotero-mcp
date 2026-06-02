@@ -1,0 +1,11 @@
+{
+  "name": "zotero-mcp",
+  "owner": { "name": "Yun" },
+  "plugins": [
+    {
+      "name": "zotero-mcp",
+      "source": "./",
+      "description": "Zotero 文献工作流 skill(use-zotero-mcp)"
+    }
+  ]
+}

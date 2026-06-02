@@ -1,0 +1,5 @@
+{
+  "name": "zotero-mcp",
+  "description": "Yun 的 Zotero 文献工作流 skill(按论文名入库 + 全文抽取 + markdown/HTML 笔记写回)。MCP server 仍走全局注册,本 plugin 只打包 skill。",
+  "author": { "name": "Yun" }
+}
