@@ -1,533 +1,195 @@
-# Zotero MCP: Chat with your Research Library—Local or Web—in Claude, ChatGPT, and more.
+# zotero-mcp (Yun fork)
 
-<p align="center">
-  <a href="https://www.zotero.org/">
-    <img src="https://img.shields.io/badge/Zotero-CC2936?style=for-the-badge&logo=zotero&logoColor=white" alt="Zotero">
-  </a>
-  <a href="https://www.anthropic.com/claude">
-    <img src="https://img.shields.io/badge/Claude-6849C3?style=for-the-badge&logo=anthropic&logoColor=white" alt="Claude">
-  </a>
-  <a href="https://chatgpt.com/">
-    <img src="https://img.shields.io/badge/ChatGPT-74AA9C?style=for-the-badge&logo=openai&logoColor=white" alt="ChatGPT">
-  </a>
-  <a href="https://modelcontextprotocol.io/introduction">
-    <img src="https://img.shields.io/badge/MCP-0175C2?style=for-the-badge&logoColor=white" alt="MCP">
-  </a>
-  <a href="https://pypi.org/project/zotero-mcp-server/">
-    <img src="https://img.shields.io/pypi/v/zotero-mcp-server?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI">
-  </a>
-  <a href="https://discord.gg/BvgjbcBUqg">
-    <img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord">
-  </a>
-</p>
+贴合 **Yun 个人文献工作流**的 Zotero MCP server。基于 [`54yyyu/zotero-mcp`](https://github.com/54yyyu/zotero-mcp) v0.4.1 演进，按需裁剪 + 扩展。
 
-**Zotero MCP** seamlessly connects your [Zotero](https://www.zotero.org/) research library with [ChatGPT](https://openai.com), [Claude](https://www.anthropic.com/claude), and other AI assistants (e.g., [Cherry Studio](https://cherry-ai.com/), [Chorus](https://chorus.sh), [Cursor](https://www.cursor.com/)) via the [Model Context Protocol](https://modelcontextprotocol.io/introduction). Review papers, get summaries, analyze citations, extract PDF annotations, and more!
+> 一个人长期维护。设计/进度以 **`PROGRESS.md`** 与 **`CLAUDE.md`** 为准，本 README 只讲「怎么装、怎么用、怎么更新」。
+
+核心工作流：**按论文名检索 → 入库 Zotero → 抽取全文 → 把阅读笔记 / 渲染好的 HTML 写回条目（Zotero UI 可见、随库同步）。**
 
 ---
 
-## ✨ Features
+## 这个 fork 和 upstream 的区别
 
-### 🧠 AI-Powered Semantic Search
-- **Vector-based similarity search** over your entire research library (requires `[semantic]` extra)
-- **Multiple embedding models**: Default (free, local), OpenAI, and Gemini
-- **Intelligent results** with similarity scores and contextual matching
-- **Auto-updating database** with configurable sync schedules
+| 方面 | 本 fork |
+|---|---|
+| 语义搜索 | **已关闭**（代码层注释掉入口，无 ChromaDB / 向量库依赖） |
+| 连接模式 | **hybrid**：local API 读 + web API 写；附件文件走 **WebDAV**（坚果云） |
+| 安装方式 | 从本仓 **editable 安装**（不走 PyPI 包） |
+| 笔记写回 | `zotero_create_note` 默认 **markdown**（自动转 HTML 入库） |
+| 富渲染笔记 | 新增 `zotero_add_attachment` —— 把自包含 .html（MathJax/代码高亮）挂到现有条目，浏览器打开完美渲染（note 会被净化，附件不会） |
+| OA PDF | `add_by_doi` 内嵌 OA 级联（Unpaywall/arXiv/Semantic Scholar/PMC），命中后**同步推送 WebDAV** |
+| 返回风格 | 工具返回 **markdown 字符串**（非 dict） |
+| skill 复用 | 本仓同时是 **Claude Code plugin + marketplace**，跨项目装一次即可用（见下） |
 
-### 🔍 Search Your Library
-- Find papers, articles, and books by title, author, or content
-- Perform complex searches with multiple criteria
-- Browse collections, tags, and recent additions
-- Semantic search for conceptual and topic-based discovery
+---
 
-### 📚 Access Your Content
-- Retrieve detailed metadata for any item (markdown or BibTeX export)
-- Get full text content (when available)
-- Look up items by BetterBibTeX citation key
+## 一、安装 MCP server
 
-### 📝 Work with Annotations
-- Extract and search PDF annotations with page numbers
-- Access Zotero's native annotations
-- Create and update notes and annotations
-- Extract PDF table of contents / outlines (requires `[pdf]` extra)
+### 前置
+- **Python 3.10+**、**[uv](https://docs.astral.sh/uv/)**
+- **Zotero 7+**，并在 `设置 → 高级 → 允许其它应用与 Zotero 通信` 打开本地 API
+- 写操作 / WebDAV 需要：Zotero 账号已登录、data sync 走 Zotero、文件 sync 走 WebDAV
+- 取一个 **Zotero API key** 与 **library ID**：https://www.zotero.org/settings/keys
 
-### ✏️ Write Operations
-- **Add papers by DOI** with auto-fetched metadata and open-access PDF cascade (Unpaywall, arXiv, Semantic Scholar, PMC)
-- **Add papers by URL** (arXiv, DOI links, generic webpages) or from local files
-- Create and manage collections, update item metadata, batch-update tags
-- Find and merge duplicate items with dry-run preview
-- **Hybrid mode**: local reads + web API writes for local-mode users
+### editable 安装
 
-### 📊 Scite Citation Intelligence (optional `[scite]` extra)
-- **Citation tallies**: See how many papers support, contrast, or mention each item — the MCP version of the [Scite Zotero Plugin](https://github.com/scitedotai/scite-zotero-plugin)
-- **Retraction alerts**: Scan your library for retracted or corrected papers
-- No Scite account required — uses public API endpoints
-
-### 🌐 Flexible Access Methods
-- Local mode for offline access (no API key needed)
-- Web API for cloud library access
-- Hybrid mode: read from local Zotero, write via web API
-
-### ⌨️ Standalone CLI (`zotero-cli`)
-- Search, browse, and edit your library directly from the terminal — no AI assistant required
-- Ideal for scripting, automation, and quick lookups
-- Short aliases (`s`, `g`, `ann`, `coll`) for interactive use
-
-## 🚀 Quick Install
-
-> **New to the command line?** Try the community-built [Zotero MCP Setup](https://github.com/ehawkin/zotero-mcp-setup) — includes a macOS GUI installer (DMG), one-click install scripts for Mac/Windows, and a step-by-step guide. No Terminal experience needed.
-
-### Default Installation (core tools only)
-
-The base install is lightweight — it includes search, metadata retrieval, annotations, and write operations. No ML/AI dependencies are pulled in.
-
-#### Installing via uv (recommended)
-
-```bash
-uv tool install zotero-mcp-server
-zotero-mcp setup  # Auto-configure (Claude Desktop supported)
+```powershell
+uv tool install --editable "D:\Claude\zotero-mcp"
+# 需要 PDF 大纲 / 读页 / 本地文件 DOI 抽取时，带上 [pdf] extra：
+# uv tool install --editable "D:\Claude\zotero-mcp[pdf]"
 ```
 
-#### Installing via pip
+入口落在 `C:\Users\yun\.local\bin\`：
+- `zotero-mcp.exe` —— MCP server（给 Claude Code / Codex 用）
+- `zotero-cli.exe` —— 独立 CLI（脚本 / 快速查询，省 token）
 
-```bash
-pip install zotero-mcp-server
-zotero-mcp setup  # Auto-configure (Claude Desktop supported)
-```
+可选 extra：`[pdf]`（PyMuPDF，PDF 大纲/读页/本地文件 DOI 抽取）、`[scite]`（引用统计 + 撤稿提醒）。`[semantic]` **不要装**——语义功能本 fork 已关。
 
-#### Installing via pipx
+> 验证：`zotero-cli search "<关键词>" --limit 1` 能读到真实库即安装成功。
 
-```bash
-pipx install zotero-mcp-server
-zotero-mcp setup  # Auto-configure (Claude Desktop supported)
-```
+### 环境变量（hybrid + WebDAV）
 
-### Optional Extras
+| 变量 | 说明 |
+|---|---|
+| `ZOTERO_LOCAL=true` | 走本地 API 读 |
+| `ZOTERO_LIBRARY_TYPE=user` | 库类型 |
+| `ZOTERO_LIBRARY_ID=<你的 library id>` | web API 写需要 |
+| `ZOTERO_API_KEY=<你的 api key>` | web API 写需要 |
+| `ZOTERO_WEBDAV_URL=https://dav.jianguoyun.com/dav/<文件夹>/` | 附件文件落点 |
+| `ZOTERO_WEBDAV_USERNAME=<你的坚果云邮箱>` | WebDAV 账号 |
+| `ZOTERO_WEBDAV_PASSWORD=<坚果云应用密码>` | WebDAV 密码（**非**登录密码） |
 
-Heavy ML/PDF dependencies are separated into optional extras so the base install stays fast and small:
+> 笔记走 Zotero data sync；OA PDF / `add_attachment` 的文件走 WebDAV。
+> **密钥不入库**——只写进下面各客户端的本地配置，仓库里永远只放占位符。
 
-| Extra | What it adds | Install command |
-|-------|-------------|-----------------|
-| `semantic` | Semantic search via ChromaDB, sentence-transformers, OpenAI/Gemini embeddings | `pip install "zotero-mcp-server[semantic]"` |
-| `pdf` | PDF outline extraction (PyMuPDF) and EPUB annotation support | `pip install "zotero-mcp-server[pdf]"` |
-| `scite` | [Scite](https://scite.ai) citation intelligence — tallies and retraction alerts (no account needed) | `pip install "zotero-mcp-server[scite]"` |
-| `all` | Everything above | `pip install "zotero-mcp-server[all]"` |
-
-For example, with uv:
-```bash
-uv tool install "zotero-mcp-server[all]"    # Full install with all features
-uv tool install "zotero-mcp-server[semantic]" # Just semantic search
-```
-
-If you only need basic library access (search, read, annotate, write), the default install with no extras is all you need.
-
-#### Updating Your Installation
-
-Keep zotero-mcp up to date with the smart update command:
-
-```bash
-# Check for updates
-zotero-mcp update --check-only
-
-# Update to latest version (preserves all configurations)
-zotero-mcp update
-```
-
-## 🧠 Semantic Search
-
-Zotero MCP now includes powerful AI-powered semantic search capabilities that let you find research based on concepts and meaning, not just keywords.
-
-### Setup Semantic Search
-
-During setup or separately, configure semantic search:
-
-```bash
-# Configure during initial setup (recommended)
-zotero-mcp setup
-
-# Or configure semantic search separately
-zotero-mcp setup --semantic-config-only
-```
-
-**Available Embedding Models:**
-- **Default (all-MiniLM-L6-v2)**: Free, runs locally, good for most use cases
-- **OpenAI**: Better quality, requires API key (`text-embedding-3-small` or `text-embedding-3-large`)
-- **Gemini**: Better quality, requires API key (`gemini-embedding-001`)
-
-**Update Frequency Options:**
-- **Manual**: Update only when you run `zotero-mcp update-db`
-- **Auto on startup**: Update database every time the server starts
-- **Daily**: Update once per day automatically
-- **Every N days**: Set custom interval
-
-### Using Semantic Search
-
-After setup, initialize your search database:
-
-```bash
-# Build the semantic search database (fast, metadata-only)
-zotero-mcp update-db
-
-# Build with full-text extraction (slower, more comprehensive)
-zotero-mcp update-db --fulltext
-
-# Use your custom zotero.sqlite path
-zotero-mcp update-db --fulltext --db-path "/Your_custom_path/zotero.sqlite"
-
-# If you have embedding conflicts or changed models, force a rebuild
-zotero-mcp update-db --force-rebuild
-
-# Check database status
-zotero-mcp db-status
-```
-
-**Example Semantic Queries in your AI assistant:**
-- *"Find research similar to machine learning concepts in neuroscience"*
-- *"Papers that discuss climate change impacts on agriculture"*
-- *"Research related to quantum computing applications"*
-- *"Studies about social media influence on mental health"*
-- *"Find papers conceptually similar to this abstract: [paste abstract]"*
-
-The semantic search provides similarity scores and finds papers based on conceptual understanding, not just keyword matching.
-
-## 🖥️ Setup & Usage
-
-Full documentation is available at [Zotero MCP docs](https://stevenyuyy.com/zotero-mcp/).
-
-**Requirements**
-- Python 3.10+
-- Zotero 7+ (for local API with full-text access)
-- An MCP-compatible client (e.g., Claude Desktop, ChatGPT Developer Mode, Cherry Studio, Chorus)
-
-**For ChatGPT setup: see the [Getting Started guide](./docs/getting-started.md).**
-
-### For Claude Desktop (example MCP client)
-
-#### Configuration
-After installation, either:
-
-1. **Auto-configure** (recommended):
-   ```bash
-   zotero-mcp setup
-   ```
-
-2. **Manual configuration**:
-   Add to your `claude_desktop_config.json`:
-   ```json
-   {
-     "mcpServers": {
-       "zotero": {
-         "command": "zotero-mcp",
-         "env": {
-           "ZOTERO_LOCAL": "true"
-         }
-       }
-     }
-   }
-   ```
-
-#### Usage
-
-1. Start Zotero desktop (make sure local API is enabled in preferences)
-2. Launch Claude Desktop
-3. Access the Zotero-MCP tool through Claude Desktop's tools interface
-
-Example prompts:
-- "Search my library for papers on machine learning"
-- "Find recent articles I've added about climate change"
-- "Summarize the key findings from my paper on quantum computing"
-- "Extract all PDF annotations from my paper on neural networks"
-- "Search my notes and annotations for mentions of 'reinforcement learning'"
-- "Show me papers tagged '#Arm' excluding those with '#Crypt' in my library"
-- "Search for papers on operating system with tag '#Arm'"
-- "Export the BibTeX citation for papers on machine learning"
-- **"Find papers conceptually similar to deep learning in computer vision"** *(semantic search)*
-- **"Research that relates to the intersection of AI and healthcare"** *(semantic search)*
-- **"Papers that discuss topics similar to this abstract: [paste text]"** *(semantic search)*
-
-### For Cherry Studio
-
-#### Configuration
-Go to Settings -> MCP Servers -> Edit MCP Configuration, and add the following:
+### 注册到 Claude Code（`~/.claude.json` 的 `mcpServers`）
 
 ```json
 {
   "mcpServers": {
     "zotero": {
-      "name": "zotero",
-      "type": "stdio",
-      "isActive": true,
-      "command": "zotero-mcp",
-      "args": [],
+      "command": "C:\\Users\\yun\\.local\\bin\\zotero-mcp.exe",
       "env": {
-        "ZOTERO_LOCAL": "true"
+        "ZOTERO_LOCAL": "true",
+        "ZOTERO_LIBRARY_TYPE": "user",
+        "ZOTERO_LIBRARY_ID": "<你的 library id>",
+        "ZOTERO_API_KEY": "<你的 api key>",
+        "ZOTERO_WEBDAV_URL": "https://dav.jianguoyun.com/dav/<文件夹>/",
+        "ZOTERO_WEBDAV_USERNAME": "<你的坚果云邮箱>",
+        "ZOTERO_WEBDAV_PASSWORD": "<坚果云应用密码>"
       }
     }
   }
 }
 ```
-Then click "Save".
 
-Cherry Studio also provides a visual configuration method for general settings and tools selection.
+### 注册到 Codex（`~/.codex/config.toml`）
 
-## 🔧 Advanced Configuration
+```toml
+[mcp_servers.zotero]
+command = "C:\\Users\\yun\\.local\\bin\\zotero-mcp.exe"
 
-### Using Web API Instead of Local API
-
-For accessing your Zotero library via the web API (useful for remote setups):
-
-```bash
-zotero-mcp setup --no-local --api-key YOUR_API_KEY --library-id YOUR_LIBRARY_ID
+[mcp_servers.zotero.env]
+ZOTERO_LOCAL = "true"
+ZOTERO_LIBRARY_TYPE = "user"
+ZOTERO_LIBRARY_ID = "<你的 library id>"
+ZOTERO_API_KEY = "<你的 api key>"
+ZOTERO_WEBDAV_URL = "https://dav.jianguoyun.com/dav/<文件夹>/"
+ZOTERO_WEBDAV_USERNAME = "<你的坚果云邮箱>"
+ZOTERO_WEBDAV_PASSWORD = "<坚果云应用密码>"
+PYTHONUTF8 = "1"
 ```
 
-### Environment Variables
+> **`PYTHONUTF8=1` 是 Codex 专属**：Codex 的 Rust 客户端严格校验 stderr 的 UTF-8，而 FastMCP 启动 banner 含 emoji/制表符，在 Windows 默认编码下不是合法 UTF-8 会触发 WARN。设这个变量即修复。Claude Code 不需要。
 
-**Zotero Connection:**
-- `ZOTERO_LOCAL=true`: Use the local Zotero API (default: false)
-- `ZOTERO_API_KEY`: Your Zotero API key (for web API)
-- `ZOTERO_LIBRARY_ID`: Your Zotero library ID (for web API)
-- `ZOTERO_LIBRARY_TYPE`: The type of library (user or group, default: user)
-- `ZOTERO_WEBDAV_URL`: Optional WebDAV folder URL for direct attachment downloads in remote mode
-- `ZOTERO_WEBDAV_USERNAME`: Optional WebDAV username
-- `ZOTERO_WEBDAV_PASSWORD`: Optional WebDAV password
+改完配置 **重启对应客户端** 生效。
 
-**Semantic Search:**
-- `ZOTERO_EMBEDDING_MODEL`: Embedding model to use (default, openai, gemini)
-- `OPENAI_API_KEY`: Your OpenAI API key (for OpenAI embeddings)
-- `OPENAI_EMBEDDING_MODEL`: OpenAI model name (text-embedding-3-small, text-embedding-3-large)
-- `OPENAI_BASE_URL`: Custom OpenAI endpoint URL (optional, for use with compatible APIs)
-- `GEMINI_API_KEY`: Your Gemini API key (for Gemini embeddings)
-- `GEMINI_EMBEDDING_MODEL`: Gemini model name (gemini-embedding-001)
-- `GEMINI_BASE_URL`: Custom Gemini endpoint URL (optional, for use with compatible APIs)
-- `ZOTERO_DB_PATH`: Custom `zotero.sqlite` path (optional)
+---
 
-### Command-Line Options
+## 二、安装 skill（跨项目复用）
 
-```bash
-# Run the server directly
-zotero-mcp serve
+工作流知识封装在 skill `use-zotero-mcp` 里。本仓同时是 **Claude Code plugin + marketplace**，装一次即可在**所有 Claude Code 项目**里用。
 
-# Specify transport method
-zotero-mcp serve --transport stdio|streamable-http|sse
-
-# Setup and configuration
-zotero-mcp setup --help                    # Get help on setup options
-zotero-mcp setup --semantic-config-only    # Configure only semantic search
-zotero-mcp setup-info                      # Show installation path and config info for MCP clients
-
-# Updates and maintenance
-zotero-mcp update                          # Update to latest version
-zotero-mcp update --check-only             # Check for updates without installing
-zotero-mcp update --force                  # Force update even if up to date
-
-# Semantic search database management
-zotero-mcp update-db                       # Update semantic search database (fast, metadata-only)
-zotero-mcp update-db --fulltext             # Update with full-text extraction (comprehensive but slower)
-zotero-mcp update-db --force-rebuild       # Force complete database rebuild
-zotero-mcp update-db --fulltext --force-rebuild  # Rebuild with full-text extraction
-zotero-mcp update-db --fulltext --db-path "your_path_to/zotero.sqlite" # Customize your zotero database path
-zotero-mcp db-status                       # Show database status and info
-
-# General
-zotero-mcp version                         # Show current version
+```
+/plugin marketplace add KaiyunGuo/zotero-mcp
+/plugin install zotero-mcp@zotero-mcp
 ```
 
-## ⌨️ CLI Mode (`zotero-cli`)
+- 调用：`/zotero-mcp:use-zotero-mcp`
+- 当前 session 立即生效：`/reload-plugins`（或新开会话自动加载）
+- **Codex 侧不装 plugin**：靠仓库内 `.agents/skills/use-zotero-mcp/SKILL.md` 副本（与 plugin 版保持字节一致）
 
-`zotero-cli` is a standalone terminal interface to your Zotero library. It uses the same tools as the MCP server but without needing an AI assistant — useful for quick lookups, shell scripts, and automation.
+---
 
-Use `zotero-mcp` when your AI client supports MCP (Claude Desktop, ChatGPT). Use `zotero-cli` for shell scripts, cron jobs, or agentic pipelines with shell access (e.g. Claude Code) — CLI commands cost far fewer tokens than MCP tool schemas and compose naturally with Unix pipes.
+## 三、更新
 
-Both share the same configuration set up by `zotero-mcp setup`.
+### 更新 skill（plugin）
+```
+# 1) 改 skill 后推送（两处副本须同步：skills/ 与 .agents/skills/）
+git push
+# 2) 各项目拉最新（省略了 version，每个 commit 即新版）
+/plugin marketplace update zotero-mcp
+```
 
-### Quick reference
+### 更新 MCP server 代码
+editable 安装，`git pull` 后代码即时生效，无需重装：
+```powershell
+git pull
+# 仅当依赖（pyproject）变化时才需重装：
+# uv tool install --reinstall --editable "D:\Claude\zotero-mcp"
+```
+> 运行中的 MCP server 进程不会热重载——改了 server 代码需**重启客户端**。
 
-```bash
-# Search
-zotero-cli search "machine learning"           # keyword search
-zotero-cli s "neural networks" --limit 5       # short alias, limit results
-zotero-cli search --mode semantic "attention mechanisms"
-zotero-cli search --mode tag "important,reviewed"
+---
 
-# Get item details
-zotero-cli get metadata ABC123                 # markdown metadata
-zotero-cli g metadata ABC123 --format bibtex  # BibTeX export
-zotero-cli get fulltext ABC123                 # full text
-zotero-cli get children ABC123                 # attachments and notes
+## 四、工具一览
 
-# Edit item metadata
-zotero-cli edit ABC123 --title "New Title"
-zotero-cli edit ABC123 --add-tags "reviewed,important" --date "2024"
+> 返回 markdown 字符串。**★ = 本 fork 自定义/改造**。语义搜索工具已移除。
 
-# Notes and annotations
-zotero-cli notes list ABC123
-zotero-cli notes create --item-key ABC123 --text "My note" --tags "idea"
-zotero-cli notes create --item-key ABC123 --text -   # read from stdin
-zotero-cli ann list ABC123                    # annotations (short alias)
-zotero-cli ann search "highlight text"
+**检索**：`zotero_search_items` · `zotero_advanced_search` · `zotero_search_by_tag` · `zotero_get_recent` · `zotero_get_collections` · `zotero_get_collection_items` · `zotero_get_tags` · `zotero_search_by_citation_key`（BetterBibTeX，Extra 兜底）
 
-# Add items
+**内容**：`zotero_get_item_metadata`（markdown/json/bibtex）· `zotero_get_item_fulltext` · `zotero_get_item_children` · `zotero_get_pdf_outline`（需 `[pdf]`）
+
+**笔记 / 附件**：`zotero_create_note` ★（默认 markdown→HTML）· `zotero_update_note` · `zotero_get_notes` · `zotero_search_notes` · `zotero_get_annotations` · **`zotero_add_attachment` ★（把任意本地文件/自包含 HTML 挂到现有条目，存 WebDAV）**
+
+**入库 / 管理**：`zotero_add_by_doi` ★（OA PDF 级联 + WebDAV）· `zotero_add_by_url` · `zotero_add_from_file` ★（本地 PDF/EPUB，自动抽 DOI；WebDAV）· `zotero_update_item` · `zotero_batch_update_tags` · `zotero_create_collection` · `zotero_manage_collections` · `zotero_find_duplicates` · `zotero_merge_duplicates`
+
+**关联 / 引用**：`zotero_get_item_related` · `zotero_add_item_relation` · `zotero_remove_item_relation` · `scite_enrich_item` / `scite_enrich_search` / `scite_check_retractions`（需 `[scite]`）
+
+### CLI 快查（`zotero-cli`）
+```powershell
+zotero-cli search "machine learning" --limit 5
+zotero-cli get metadata ABC123 --format bibtex
+zotero-cli get fulltext ABC123
 zotero-cli add doi 10.1038/s41586-021-03819-2
-zotero-cli add url https://arxiv.org/abs/2301.00001
-zotero-cli add file /path/to/paper.pdf
-
-# Collections and tags
-zotero-cli coll list                          # list collections (short alias)
-zotero-cli coll search "PhD Research"
-zotero-cli tags list
-
-# Semantic search database
-zotero-cli db update
-zotero-cli db update --fulltext --force-rebuild
-zotero-cli db status
-
-# Library and duplicates
-zotero-cli library info
-zotero-cli duplicates find
+zotero-cli notes create --item-key ABC123 --text "笔记" --tags idea
+zotero-cli -v search "CRISPR"        # -v 看 API 调用过程
 ```
 
-### Verbose mode
+---
 
-Add `-v` anywhere to see progress messages (e.g., which API calls are made):
+## 五、Troubleshooting
 
-```bash
-zotero-cli -v search "CRISPR"
-```
+- **读不到库 / 无结果**：确认 Zotero 桌面在运行、本地 API 已开启（`设置 → 高级`）。
+- **写操作失败 / 只建出游离笔记**：local API 是**只读**的；写必须有 `ZOTERO_API_KEY` + `ZOTERO_LIBRARY_ID`（hybrid）。
+- **刚入库取不到 PDF 正文**：附件经 web API 上传后，桌面端还没把文件同步到本地/WebDAV，**先等一次桌面同步再重试**（详见 PROGRESS「PDF 上传落点」）。
+- **公式不渲染**：别用 `create_note`（HTML 会被净化、MathJax 不跑）；写自包含 .html 用 `zotero_add_attachment` 挂为附件，浏览器打开即渲染。HTML 若 CDN 外链 MathJax 需联网，要离线完美则内联 JS。
+- **Codex 报 stderr non-UTF-8 (WARN)**：在 Codex 配置加 `PYTHONUTF8=1`（见上）。
+- **`zotero-mcp.exe` 报 `uv trampoline failed to canonicalize`**：在沙箱里改用 `uv run ...` 跑，不代表代码坏。
 
-## 📑 PDF Annotation Extraction
+---
 
-Zotero MCP includes advanced PDF annotation extraction capabilities:
+## 六、文档地图
 
-- **Direct PDF Processing**: Extract annotations directly from PDF files, even if they're not yet indexed by Zotero
-- **Enhanced Search**: Search through PDF annotations and comments
-- **Image Annotation Support**: Extract image annotations from PDFs
-- **Seamless Integration**: Works alongside Zotero's native annotation system
+| 文件 | 作用 |
+|---|---|
+| `PROGRESS.md` | **编码任务追踪。新 session 先读这个** |
+| `CLAUDE.md` / `AGENTS.md` | 项目约束与工作规范（Claude / Codex 各一份） |
+| `skills/use-zotero-mcp/SKILL.md` | 工作流 skill（plugin 规范源）；`.agents/` 下为 Codex 副本 |
+| `DESIGN.html` / `HANDOFF.md` / `.docs/plans/*` | 原「从零自建」设计，**历史参考** |
 
-For optimal annotation extraction, it is **highly recommended** to install the [Better BibTeX plugin](https://retorque.re/zotero-better-bibtex/installation/) for Zotero. The annotation-related functions have been primarily tested with this plugin and provide enhanced functionality when it's available.
+---
 
+## 致谢 / License
 
-The first time you use PDF annotation features, the necessary tools will be automatically downloaded.
-
-## 🔗 Managing Related Items
-
-Zotero MCP now supports managing relationships between items in your library. This is useful for linking related papers, tracking versions, or connecting preprints to their published versions.
-
-### View Related Items
-```
-zotero_get_item_related(item_key="ABCD1234")
-```
-
-### Add a Relation
-Create a bidirectional link between two items:
-```
-zotero_add_item_relation(
-    item_key="ABCD1234",
-    related_item_key="EFGH5678",
-    relation_type="dc:relation"  # Optional, defaults to "dc:relation"
-)
-```
-
-### Remove a Relation
-```
-zotero_remove_item_relation(
-    item_key="ABCD1234",
-    related_item_key="EFGH5678",
-    remove_bidirectional=True  # Also remove the reverse relation (default: true)
-)
-```
-
-**Relation Types:**
-- `dc:relation` — General related items (default)
-- `owl:sameAs` — Items that are the same work (e.g., preprint and published version)
-
-## 📚 Available Tools
-
-### 🧠 Semantic Search Tools
-- `zotero_semantic_search`: AI-powered similarity search with embedding models
-- `zotero_update_search_database`: Manually update the semantic search database
-- `zotero_get_search_database_status`: Check database status and configuration
-
-### 🔍 Search Tools
-- `zotero_search_items`: Search your library by keywords
-- `zotero_advanced_search`: Perform complex searches with multiple criteria
-- `zotero_get_collections`: List collections
-- `zotero_get_collection_items`: Get items in a collection
-- `zotero_get_tags`: List all tags
-- `zotero_get_recent`: Get recently added items
-- `zotero_search_by_tag`: Search your library using custom tag filters
-
-### 📚 Content Tools
-- `zotero_get_item_metadata`: Get detailed metadata (supports `format="markdown"`, `format="json"` for complete raw Zotero metadata, and `format="bibtex"`)
-- `zotero_get_item_fulltext`: Get full text content
-- `zotero_get_item_children`: Get attachments and notes
-
-### 📝 Annotation & Notes Tools
-- `zotero_get_annotations`: Get annotations (including direct PDF extraction)
-- `zotero_get_notes`: Retrieve notes from your Zotero library
-- `zotero_search_notes`: Search in notes and annotations (including PDF-extracted)
-- `zotero_create_note`: Create a new note for an item (beta feature)
-
-### 📊 Scite Citation Intelligence Tools
-- `scite_enrich_item`: Get Scite citation tallies and retraction alerts for a paper
-- `scite_enrich_search`: Search your Zotero library with Scite-enriched results (tallies + alerts inline)
-- `scite_check_retractions`: Scan items for retractions and editorial notices
-
-### 📦 Item & Collection Management Tools
-- `zotero_add_by_doi`: Add a paper by DOI with automatic metadata and open-access PDF attachment
-- `zotero_add_by_url`: Add a paper by URL (arXiv, DOI URLs, and general webpages)
-- `zotero_add_from_file`: Import a local PDF or EPUB file with automatic DOI extraction
-- `zotero_create_collection`: Create a new collection (folder/project) in your library
-- `zotero_search_collections`: Search for collections by name to find their keys
-- `zotero_manage_collections`: Add or remove items from collections
-- `zotero_update_item`: Update metadata for an existing item (title, tags, abstract, date, etc.)
-- `zotero_find_duplicates`: Find duplicate items by title and/or DOI
-- `zotero_merge_duplicates`: Merge duplicate items with dry-run preview; consolidates all child items
-- `zotero_get_pdf_outline`: Extract the table of contents / outline from a PDF attachment
-- `zotero_search_by_citation_key`: Look up items by BetterBibTeX citation key (with Extra field fallback)
-
-### 🔗 Related Items Tools
-- `zotero_get_item_related`: Get all related items for a specific Zotero item
-- `zotero_add_item_relation`: Add a related item relationship (creates bidirectional link)
-- `zotero_remove_item_relation`: Remove a related item relationship
-
-## 🧪 Testing
-
-### Unit Tests
-```bash
-uv run pytest tests/     # 294 tests, ~2 seconds
-```
-
-### Integration Test Plan
-A 45-point live integration test plan is included at `docs/integration-test-plan.md`. It's designed to be given to Claude in Claude Desktop, which will execute each test against your real Zotero library. Tests cover all tools, PDF attachment cascade, attach_mode, BetterBibTeX lookups, and multi-step showcase prompts. See the file for full instructions.
-
-## 🔍 Troubleshooting
-
-### General Issues
-- **No results found**: Ensure Zotero is running and the local API is enabled. You need to toggle on `Allow other applications on this computer to communicate with Zotero` in Zotero preferences.
-- **Can't connect to library**: Check your API key and library ID if using web API
-- **Full text not available**: Make sure you're using Zotero 7+ for local full-text access
-- **Local library limitations**: Some functionality (tagging, library modifications) may not work with local JS API. Consider using web library setup for full functionality. (See the [docs](docs/getting-started.md#local-library-limitations) for more info.)
-- **Installation/search option switching issues**: Database problems from changing install methods or search options can often be resolved with `zotero-mcp update-db --force-rebuild`
-
-### Semantic Search Issues
-- **"Missing required environment variables" when running update-db**: Run `zotero-mcp setup` to configure your environment, or the CLI will automatically load settings from your MCP client config (e.g., Claude Desktop)
-- **ChromaDB / stale embedding model errors**: If you changed embedding models and see 404 errors (e.g., `text-embedding-004 is not found`), run `zotero-mcp update-db --force-rebuild` to recreate the collection with your current model. If that doesn't work, delete `~/.config/zotero-mcp/chroma_db/` and rebuild.
-- **Database update takes long**: By default, `update-db` is fast (metadata-only). For comprehensive indexing with full-text, use `--fulltext` flag. Use `--limit` parameter for testing: `zotero-mcp update-db --limit 100`
-- **Semantic search returns no results**: Ensure the database is initialized with `zotero-mcp update-db` and check status with `zotero-mcp db-status`
-- **Limited search quality**: For better semantic search results, use `zotero-mcp update-db --fulltext` to index full-text content (requires local Zotero setup)
-- **OpenAI/Gemini API errors**: Verify your API keys are correctly set and have sufficient credits/quota
-
-### Update Issues
-- **Update command fails**: Check your internet connection and try `zotero-mcp update --force`
-- **Configuration lost after update**: The update process preserves configs automatically, but check `~/.config/zotero-mcp/` for backup files
-
-## ☕ Support
-
-If you find Zotero MCP useful, consider buying me a coffee!
-
-<a href="https://buymeacoffee.com/stevenyuyy">
-  <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee">
-</a>
-
-## 📄 License
-
-MIT
+Fork of [`54yyyu/zotero-mcp`](https://github.com/54yyyu/zotero-mcp)（MIT）。本 fork 沿用 **MIT**。
