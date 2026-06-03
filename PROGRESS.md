@@ -51,6 +51,9 @@ _Updated: 2026-05-25_
 - [x] **TASK-008** 重写 README 为实用版 — 弃 upstream 通用/营销式文档,改为贴合 Yun fork 的实操:无语义搜索、hybrid+WebDAV、editable 安装、Claude Code(~/.claude.json) + Codex(~/.codex/config.toml,含 PYTHONUTF8=1) 注册、skill plugin 安装/更新、自定义工具(add_attachment/markdown notes/WebDAV OA PDF)。密钥占位符化。中文为主(与项目其余文档一致)。
   `19149eb` docs: README 重写为实用版 (TASK-008)
 
+- [x] **TASK-009** 修 update_item 写回只读字段 400 — read-modify-write 把 attachment 的只读 `lastRead`(阅读器上次打开时间戳)原样 PUT,Zotero web API 拒「Invalid keys present: lastRead」。regular item 无此字段故从未暴露。修:`_helpers._strip_readonly_item_fields(item)` 剥服务端管理只读键(`_READONLY_ITEM_DATA_KEYS={lastRead}`),在所有 9 处 `write_zot.update_item(...)` 写边界统一过滤(update_item/batch_update_tags/merge_duplicates/add+remove_item_relation),调用方无需知道 lastRead 存在。delete_item 用定向 PATCH 不受影响。**TDD**:test_update_item_readonly.py 2 项绿(attachment 剥 lastRead 写成功 + regular item 不受影响);-k "update_item/relation/merge/duplicate/batch/tag/v021" 194 passed 无新回归(3 errors 为 test_description_tokens GBK 既有基线)。src ruff 零错。
+  `a88587b` fix: update_item 写回剥离只读字段 lastRead (TASK-009)
+
 ## 测试基线(2026-05-25,Yun 决策)
 全套 `uv run --extra dev pytest -p no:cacheprovider` 基线 = **14 failed + 20 errors + 778 passed**。这 14+20 是**预期既有失败,不修、不重复排查**(Yun 定):
 - semantic 悬空测试(`test_description_tokens.py` 全 errors、`test_cli_standalone.py`/`test_lifespan.py`/`test_search_improvements.py` 的 semantic 项)= TASK-001 停语义遗留,语义功能不需要。
