@@ -189,7 +189,7 @@ def batch_update_tags(
                             web_item = write_zot.item(item_key)
                             web_item["data"]["tags"] = current_tags
                             ctx.info(f"Updating item {item_key} via web API with tags: {current_tags}")
-                            result = write_zot.update_item(web_item)
+                            result = write_zot.update_item(_helpers._strip_readonly_item_fields(web_item))
                         except Exception as e:
                             ctx.error(f"Failed to fetch/update item {item_key} via web API: {str(e)}")
                             skipped_count += 1
@@ -197,7 +197,7 @@ def batch_update_tags(
                     else:
                         item["data"]["tags"] = current_tags
                         ctx.info(f"Updating item {item_key} with tags: {current_tags}")
-                        result = write_zot.update_item(item)
+                        result = write_zot.update_item(_helpers._strip_readonly_item_fields(item))
 
                     if _helpers._handle_write_response(result, ctx):
                         updated_count += 1
@@ -1415,7 +1415,7 @@ def update_item(
         if not changes:
             return "No changes to apply." + skip_warning
 
-        resp = write_zot.update_item(item)
+        resp = write_zot.update_item(_helpers._strip_readonly_item_fields(item))
         if _helpers._handle_write_response(resp, ctx):
             result = (
                 f"Successfully updated item `{item_key}`:\n\n"
@@ -1772,7 +1772,7 @@ def merge_duplicates(
             keeper_data = keeper.get("data", {})
             existing_tags = [t.get("tag", "") for t in keeper_data.get("tags", [])]
             keeper_data["tags"] = [{"tag": t} for t in sorted(set(existing_tags) | all_tags)]
-            resp = write_zot.update_item(keeper)
+            resp = write_zot.update_item(_helpers._strip_readonly_item_fields(keeper))
             if not _helpers._handle_write_response(resp, ctx):
                 return "Error: Failed to merge tags into keeper."
             keeper = write_zot.item(keeper_key)  # re-fetch for version
@@ -1806,7 +1806,7 @@ def merge_duplicates(
                             skipped_dupes.append(child_key)
                             continue  # Skip — keeper already has this attachment
                     fresh_child.get("data", {})["parentItem"] = keeper_key
-                    resp = write_zot.update_item(fresh_child)
+                    resp = write_zot.update_item(_helpers._strip_readonly_item_fields(fresh_child))
                     if _helpers._handle_write_response(resp, ctx):
                         moved.append(child_key)
                     else:
@@ -2310,7 +2310,7 @@ def add_item_relation(
         data["relations"] = relations
 
         # Update the primary item
-        resp = write_zot.update_item(item)
+        resp = write_zot.update_item(_helpers._strip_readonly_item_fields(item))
         if not _helpers._handle_write_response(resp, ctx):
             return f"Failed to add relation to item '{item_key}'."
 
@@ -2334,7 +2334,7 @@ def add_item_relation(
             if not _relation_exists(reverse_relations[relation_type], library_id, item_key):
                 reverse_relations[relation_type].append(item_uri)
                 related_data["relations"] = reverse_relations
-                write_zot.update_item(related_item)
+                write_zot.update_item(_helpers._strip_readonly_item_fields(related_item))
         except Exception as e:
             ctx.warn(f"Could not add reverse relation: {e}")
 
@@ -2423,7 +2423,7 @@ def remove_item_relation(
         data["relations"] = relations
 
         # Update the item
-        resp = write_zot.update_item(item)
+        resp = write_zot.update_item(_helpers._strip_readonly_item_fields(item))
         if not _helpers._handle_write_response(resp, ctx):
             return f"Failed to remove relation from item '{item_key}'."
 
@@ -2447,7 +2447,7 @@ def remove_item_relation(
                         else:
                             reverse_relations[relation_type] = reverse_list
                         related_data["relations"] = reverse_relations
-                        write_zot.update_item(related_item)
+                        write_zot.update_item(_helpers._strip_readonly_item_fields(related_item))
             except Exception as e:
                 ctx.warn(f"Could not remove reverse relation: {e}")
 

@@ -436,6 +436,28 @@ def _extract_attachment_key(attach_result) -> str | None:
     return None
 
 
+# Server-managed read-only keys that Zotero's write API rejects if present in
+# the payload ("Invalid keys present: ..."). Attachments carry ``lastRead``
+# (the reader's last-open timestamp); regular items don't, which is why a
+# read-modify-write only trips over it on attachments. Callers shouldn't need
+# to know these exist — strip them at the write boundary.
+_READONLY_ITEM_DATA_KEYS = frozenset({"lastRead"})
+
+
+def _strip_readonly_item_fields(item):
+    """Drop server-managed read-only keys from an item's ``data`` in place.
+
+    Returns the same ``item`` so it can wrap a write call inline, e.g.
+    ``write_zot.update_item(_strip_readonly_item_fields(item))``.
+    """
+    if isinstance(item, dict):
+        data = item.get("data")
+        if isinstance(data, dict):
+            for key in _READONLY_ITEM_DATA_KEYS:
+                data.pop(key, None)
+    return item
+
+
 def _download_and_attach_pdf(write_zot, item_key, pdf_url, doi, ctx):
     """Download a PDF from a URL and attach it to a Zotero item."""
     try:
