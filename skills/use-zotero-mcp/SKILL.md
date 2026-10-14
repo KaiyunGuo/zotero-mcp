@@ -41,6 +41,21 @@ have a DOI or URL, the MCP takes over.
   `C:\Users\yun\.config\zotero-mcp\config.json`. Prefer direct MCP/CLI smoke
   tests above.
 
+## Tool-level pitfalls (实测)
+
+- **5 个工具直连必失败**:`zotero_list_libraries`、`zotero_list_feeds`、
+  `zotero_switch_library`、`zotero_get_feed_items`、local 模式
+  `zotero_get_annotations` 用无参 `LocalZoteroReader()`,绕过 `config.json` 的
+  `zotero_db_path`,落到硬编码 `~/Zotero/`(本机没有)→ 报
+  `Zotero database not found`。别调这些。
+- **semantic_search 不可用**:用 `zotero_search_items` 替代(子串匹配,查询要短,
+  如「作者 年份」)。
+- **付费墙 PDF 无法经 MCP 抓取**:机构代理在 Zotero 客户端进程内,外部 MCP 借不到。
+  让用户在 Zotero UI 右键 Find Available PDF,或给本地 PDF 路径走
+  `zotero_add_from_file` / `zotero_add_attachment`。
+- 读路径:API 读走 `localhost:23119`(需 Zotero 客户端开着);SQLite 直连读
+  `D:\Program Files\Zotero\zotero.sqlite`(`immutable=1`,客户端开着也能读)。
+
 ## 按论文名入库 workflow
 
 1. **Resolve identifier first.** Given a paper name, find its DOI via WebSearch /
