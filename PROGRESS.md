@@ -57,6 +57,9 @@ _Updated: 2026-05-25_
 - [x] **TASK-010** skill 补「Tool-level pitfalls」节 — 从 PaperReader 项目 memory(zotero-tool-pitfalls)迁入:5 个无参 `LocalZoteroReader()` 工具必失败、semantic 替代、付费墙 PDF 走 UI/本地文件、读路径。`.agents/` 副本同步。get_item_fulltext token 成本已有节覆盖,不重复。
   `861f634` docs: skill 补 tool-level pitfalls (TASK-010)
 
+- [x] **TASK-011** 修 MCP server 启动崩溃 — `uv tool install --force` 重解析依赖到 mcp 2.3.0 / fastmcp 4.1.1(改用 `httpx2`),`client.py` 直接 `import httpx` 却未声明依赖 → ModuleNotFoundError。修:pyproject 显式声明 `httpx>=0.27`,并限 `mcp>=1.2.0,<2`、`fastmcp>=2.14.0,<4`(上次可用 lock 为 fastmcp 3.3.1;2.14.7 与 3.4.11 实测均注册 53 tools)。
+  `5fce906` fix: declare httpx, pin mcp/fastmcp majors
+
 ## 测试基线(2026-05-25,Yun 决策)
 全套 `uv run --extra dev pytest -p no:cacheprovider` 基线 = **14 failed + 20 errors + 778 passed**。这 14+20 是**预期既有失败,不修、不重复排查**(Yun 定):
 - semantic 悬空测试(`test_description_tokens.py` 全 errors、`test_cli_standalone.py`/`test_lifespan.py`/`test_search_improvements.py` 的 semantic 项)= TASK-001 停语义遗留,语义功能不需要。
